@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Monitor da Lojinha - Detector Dinâmico</title>
+  <title>Monitor da Lojinha - Caixa Delimitadora</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -119,7 +119,7 @@
       align-items: center;
     }
     .modal-title { font-size: 18px; font-weight: bold; }
-    .close-btn { background: none; border: none; color: #aaa; font-size: 24px; cursor: pointer; }
+    .close-btn { background: none; border: none; color: #aaa; font-size: 24px; cursor: pointer; padding: 4px 8px; }
     .modal-body { flex: 1; overflow-y: auto; padding: 20px; }
 
     .config-card {
@@ -131,7 +131,8 @@
     }
     .config-title { font-size: 14px; font-weight: bold; margin-bottom: 6px; }
     .config-desc { font-size: 12px; color: #888; margin-bottom: 10px; }
-    .slider-row { display: flex; align-items: center; gap: 10px; }
+    .slider-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .slider-row label { font-size: 13px; color: #aaa; min-width: 75px; }
     .slider-row input { flex: 1; }
     .slider-val { font-size: 13px; font-weight: bold; min-width: 50px; text-align: right; }
 
@@ -147,13 +148,52 @@
     .thumb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; }
     .thumb-grid img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 6px; cursor: pointer; }
 
-    /* Lightbox */
+    /* Lightbox com Botão de Voltar */
     #lightbox {
-      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-      background: rgba(0,0,0,0.95); z-index: 200; display: none;
-      justify-content: center; align-items: center;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      background: rgba(0, 0, 0, 0.95);
+      z-index: 200;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
     }
-    #lightbox img { max-width: 95vw; max-height: 90vh; border-radius: 8px; }
+    #lightbox img {
+      max-width: 95vw;
+      max-height: 85vh;
+      border-radius: 8px;
+      border: 1px solid #444;
+      object-fit: contain;
+    }
+    .lightbox-toolbar {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 210;
+    }
+    .btn-back {
+      background: rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 24px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      backdrop-filter: blur(8px);
+    }
+    .btn-back:active {
+      background: rgba(255, 255, 255, 0.3);
+    }
   </style>
 </head>
 <body>
@@ -183,30 +223,52 @@
     <button class="close-btn" id="close-config">&times;</button>
   </div>
   <div class="modal-body">
+    <!-- Ajuste da Caixa Delimitadora (Largura e Altura) -->
+    <div class="config-card">
+      <div class="config-title">📦 Caixa Delimitadora da Prateleira</div>
+      <div class="config-desc">Arraste o dedo na tela para desenhar a caixa diretamente sobre a prateleira, ou ajuste as dimensões abaixo:</div>
+      
+      <div class="slider-row">
+        <label>Largura:</label>
+        <input type="range" id="slider-box-w" min="10" max="95" step="1" value="50">
+        <span class="slider-val" id="val-box-w">50%</span>
+      </div>
+      <div class="slider-row">
+        <label>Altura:</label>
+        <input type="range" id="slider-box-h" min="10" max="95" step="1" value="60">
+        <span class="slider-val" id="val-box-h">60%</span>
+      </div>
+      <div class="slider-row">
+        <label>Posição X:</label>
+        <input type="range" id="slider-box-x" min="0" max="90" step="1" value="45">
+        <span class="slider-val" id="val-box-x">45%</span>
+      </div>
+      <div class="slider-row">
+        <label>Posição Y:</label>
+        <input type="range" id="slider-box-y" min="0" max="90" step="1" value="20">
+        <span class="slider-val" id="val-box-y">20%</span>
+      </div>
+    </div>
+
+    <!-- Sensibilidade -->
     <div class="config-card">
       <div class="config-title">🎚️ Sensibilidade ao Movimento</div>
-      <div class="config-desc">Quanto menor o valor, mais sensível (detecta movimentos mais sutis). Padrão recomendado: 25.</div>
+      <div class="config-desc">Quanto menor o valor, mais sensível (detecta movimentos mais sutis de dedos/mão). Padrão: 20.</div>
       <div class="slider-row">
-        <input type="range" id="slider-sens" min="5" max="60" step="1" value="25">
-        <span class="slider-val" id="val-sens">25</span>
+        <label>Sensib.:</label>
+        <input type="range" id="slider-sens" min="5" max="60" step="1" value="20">
+        <span class="slider-val" id="val-sens">20</span>
       </div>
     </div>
 
+    <!-- Quantidade de Fotos -->
     <div class="config-card">
       <div class="config-title">📸 Quantidade de Fotos</div>
-      <div class="config-desc">Fotos tiradas em sequência por evento.</div>
+      <div class="config-desc">Fotos tiradas em sequência por detecção.</div>
       <div class="slider-row">
+        <label>Fotos:</label>
         <input type="range" id="slider-count" min="1" max="5" step="1" value="3">
         <span class="slider-val" id="val-count">3 fotos</span>
-      </div>
-    </div>
-
-    <div class="config-card">
-      <div class="config-title">🚪 Lado da Prateleira</div>
-      <div class="config-desc">Qual lado da linha vermelha deve acionar o alarme.</div>
-      <div style="display: flex; gap: 8px;">
-        <button class="btn-icon" id="side-right" style="flex: 1; text-align: center;">👉 Lado Direito</button>
-        <button class="btn-icon" id="side-left" style="flex: 1; text-align: center;">👈 Lado Esquerdo</button>
       </div>
     </div>
   </div>
@@ -226,14 +288,20 @@
   </div>
 </div>
 
-<div id="lightbox"><img id="lightbox-img" src="" alt="Zoom"></div>
+<!-- Lightbox Zoom com Botão de Voltar -->
+<div id="lightbox">
+  <div class="lightbox-toolbar">
+    <button class="btn-back" id="btn-close-lightbox">⬅️ Voltar para a Galeria</button>
+  </div>
+  <img id="lightbox-img" src="" alt="Zoom">
+</div>
 
 <script>
   /* ================= BANCO LOCAL (IndexedDB) ================= */
   let db;
   function initDB() {
     return new Promise((res) => {
-      const req = indexedDB.open("LojinhaLiteDB", 1);
+      const req = indexedDB.open("LojinhaBoxDB", 1);
       req.onupgradeneeded = (e) => e.target.result.createObjectStore("eventos", { keyPath: "id", autoIncrement: true });
       req.onsuccess = (e) => { db = e.target.result; res(); };
       req.onerror = () => res();
@@ -255,14 +323,24 @@
 
   /* ================= VARIÁVEIS E ESTADO ================= */
   let isRunning = false;
-  let limiteXPercent = parseFloat(localStorage.getItem("limiteXPercent")) || 0.65;
-  let forbiddenSide = localStorage.getItem("forbiddenSide") || "right";
-  let sensibilidade = parseInt(localStorage.getItem("sensibilidade")) || 25;
+
+  // Caixa Delimitadora (X, Y, Largura, Altura em percentual de 0 a 1)
+  let boxX = parseFloat(localStorage.getItem("boxX")) || 0.45;
+  let boxY = parseFloat(localStorage.getItem("boxY")) || 0.20;
+  let boxW = parseFloat(localStorage.getItem("boxW")) || 0.50;
+  let boxH = parseFloat(localStorage.getItem("boxH")) || 0.60;
+
+  let sensibilidade = parseInt(localStorage.getItem("sensibilidade")) || 20;
   let burstCount = parseInt(localStorage.getItem("burstCount")) || 3;
 
   let cooldown = false;
   let isCapturing = false;
   let prevFrameData = null;
+
+  // Variáveis para desenhar retângulo arrastando o dedo na tela
+  let isDragging = false;
+  let dragStartX = 0;
+  let dragStartY = 0;
 
   const video = document.getElementById("input-video");
   const canvas = document.getElementById("output-canvas");
@@ -271,7 +349,7 @@
   const statusDot = document.getElementById("status-dot");
   const btnToggle = document.getElementById("btn-toggle");
 
-  // Canvas auxiliar em baixa resolução só para calcular movimento instantaneamente
+  // Canvas auxiliar em 160x120 para análise instantânea de pixels
   const motionCanvas = document.createElement("canvas");
   motionCanvas.width = 160;
   motionCanvas.height = 120;
@@ -287,7 +365,7 @@
       video.srcObject = stream;
       video.onloadedmetadata = () => {
         video.play();
-        statusText.innerText = "Pronto. Toque na tela para calibrar o limite.";
+        statusText.innerText = "Pronto. Arraste na tela para demarcar a prateleira.";
         requestAnimationFrame(renderLoop);
       };
     } catch (e) {
@@ -296,8 +374,8 @@
     }
   }
 
-  /* ================= MOTOR DE DETECÇÃO DE MOVIMENTO ================= */
-  function checarMovimentoNaZona(linhaXNorm) {
+  /* ================= DETECÇÃO DE MOVIMENTO DENTRO DA CAIXA ================= */
+  function checarMovimentoNaCaixa() {
     motionCtx.drawImage(video, 0, 0, motionCanvas.width, motionCanvas.height);
     const curr = motionCtx.getImageData(0, 0, motionCanvas.width, motionCanvas.height);
     const data = curr.data;
@@ -307,14 +385,16 @@
       return false;
     }
 
-    const startX = forbiddenSide === "right" ? Math.floor(motionCanvas.width * linhaXNorm) : 0;
-    const endX = forbiddenSide === "right" ? motionCanvas.width : Math.floor(motionCanvas.width * linhaXNorm);
+    const startX = Math.floor(motionCanvas.width * boxX);
+    const endX = Math.min(motionCanvas.width, Math.floor(motionCanvas.width * (boxX + boxW)));
+    const startY = Math.floor(motionCanvas.height * boxY);
+    const endY = Math.min(motionCanvas.height, Math.floor(motionCanvas.height * (boxY + boxH)));
 
     let pixelsMudados = 0;
-    const totalPixelsZona = (endX - startX) * motionCanvas.height;
+    const totalPixelsZona = Math.max(1, (endX - startX) * (endY - startY));
 
-    // Varre apenas os pixels que estão dentro da Zona Proibida
-    for (let y = 0; y < motionCanvas.height; y += 2) {
+    // Varre apenas os pixels dentro da caixa delimitadora
+    for (let y = startY; y < endY; y += 2) {
       for (let x = startX; x < endX; x += 2) {
         const i = (y * motionCanvas.width + x) * 4;
         const diffR = Math.abs(data[i] - prevFrameData[i]);
@@ -322,7 +402,6 @@
         const diffB = Math.abs(data[i+2] - prevFrameData[i+2]);
         const diff = (diffR + diffG + diffB) / 3;
 
-        // Se o pixel mudou de cor consideravelmente
         if (diff > sensibilidade) {
           pixelsMudados++;
         }
@@ -331,9 +410,9 @@
 
     prevFrameData = data;
 
-    // Se mais de 3.5% dos pixels da zona mudaram de uma vez (uma mão ou braço invadindo)
+    // Calibrado: 0.6% de alteração dentro da caixa (mão ou braço entrando)
     const taxaMudanca = (pixelsMudados / (totalPixelsZona / 4)) * 100;
-    return taxaMudanca > 3.5;
+    return taxaMudanca > 0.6;
   }
 
   /* ================= LOOP DE VÍDEO & DESENHO ================= */
@@ -342,38 +421,45 @@
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
 
-      // 1. Desenha o vídeo da câmera fluido
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      const linhaPx = canvas.width * limiteXPercent;
+      const pxX = canvas.width * boxX;
+      const pxY = canvas.height * boxY;
+      const pxW = canvas.width * boxW;
+      const pxH = canvas.height * boxH;
 
-      // 2. Desenha a Zona Proibida
-      ctx.fillStyle = isRunning ? "rgba(255, 0, 0, 0.22)" : "rgba(255, 165, 0, 0.15)";
-      if (forbiddenSide === "right") {
-        ctx.fillRect(linhaPx, 0, canvas.width - linhaPx, canvas.height);
-      } else {
-        ctx.fillRect(0, 0, linhaPx, canvas.height);
-      }
+      // 1. Desenha o interior da caixa delimitadora
+      ctx.fillStyle = isRunning ? "rgba(255, 0, 0, 0.22)" : "rgba(255, 165, 0, 0.18)";
+      ctx.fillRect(pxX, pxY, pxW, pxH);
 
-      // Linha tracejada
+      // 2. Bordas da caixa
       ctx.strokeStyle = isRunning ? "#ff3b30" : "#ff9100";
       ctx.lineWidth = 4;
       ctx.setLineDash([8, 6]);
-      ctx.beginPath();
-      ctx.moveTo(linhaPx, 0);
-      ctx.lineTo(linhaPx, canvas.height);
-      ctx.stroke();
+      ctx.strokeRect(pxX, pxY, pxW, pxH);
       ctx.setLineDash([]);
 
-      // Rótulo na zona
-      ctx.font = "bold 18px sans-serif";
-      ctx.fillStyle = isRunning ? "#ff3b30" : "#ff9100";
-      const rotuloX = forbiddenSide === "right" ? linhaPx + 15 : 15;
-      ctx.fillText(isRunning ? "⚠️ ZONA MONITORADA" : "⏸️ PAUSADO (CALIBRAGEM)", rotuloX, 40);
+      // 3. Cantos reforçados nos vértices da caixa
+      const corner = 18;
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = isRunning ? "#ff3b30" : "#00e676";
+      // Topo esquerdo
+      ctx.beginPath(); ctx.moveTo(pxX, pxY + corner); ctx.lineTo(pxX, pxY); ctx.lineTo(pxX + corner, pxY); ctx.stroke();
+      // Topo direito
+      ctx.beginPath(); ctx.moveTo(pxX + pxW - corner, pxY); ctx.lineTo(pxX + pxW, pxY); ctx.lineTo(pxX + pxW, pxY + corner); ctx.stroke();
+      // Fundo esquerdo
+      ctx.beginPath(); ctx.moveTo(pxX, pxY + pxH - corner); ctx.lineTo(pxX, pxY + pxH); ctx.lineTo(pxX + corner, pxY + pxH); ctx.stroke();
+      // Fundo direito
+      ctx.beginPath(); ctx.moveTo(pxX + pxW - corner, pxY + pxH); ctx.lineTo(pxX + pxW, pxY + pxH); ctx.lineTo(pxX + pxW, pxY + pxH - corner); ctx.stroke();
 
-      // 3. Processamento de Movimento
+      // 4. Rótulo informativo
+      ctx.font = "bold 15px sans-serif";
+      ctx.fillStyle = isRunning ? "#ff3b30" : "#ff9100";
+      ctx.fillText(isRunning ? "⚠️ ÁREA MONITORADA" : "📐 ARRASTE P/ REDIMENSIONAR", pxX + 8, Math.max(25, pxY - 8));
+
+      // 5. Verificação de Movimento se estiver ativo
       if (isRunning && !cooldown && !isCapturing) {
-        if (checarMovimentoNaZona(limiteXPercent)) {
+        if (checarMovimentoNaCaixa()) {
           dispararCaptura();
         }
       }
@@ -386,7 +472,6 @@
     cooldown = true;
     isCapturing = true;
 
-    // Flash visual
     const flash = document.getElementById("flash-overlay");
     flash.style.opacity = "0.7";
     setTimeout(() => flash.style.opacity = "0", 150);
@@ -409,7 +494,6 @@
 
     isCapturing = false;
 
-    // Cooldown de 5 segundos para não inundar fotos da mesma ação
     setTimeout(() => {
       cooldown = false;
       if (isRunning) {
@@ -419,16 +503,64 @@
     }, 5000);
   }
 
-  /* ================= INTERAÇÕES ================= */
-  // Calibra a linha tocando na tela
-  canvas.addEventListener("click", (e) => {
+  /* ================= ARRASTAR NA TELA PARA CRIAR A CAIXA ================= */
+  function getCanvasCoords(e) {
     const rect = canvas.getBoundingClientRect();
-    limiteXPercent = (e.clientX - rect.left) / rect.width;
-    localStorage.setItem("limiteXPercent", limiteXPercent);
-    statusText.innerText = `Limite ajustado em ${Math.round(limiteXPercent * 100)}%`;
-  });
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return {
+      x: (clientX - rect.left) / rect.width,
+      y: (clientY - rect.top) / rect.height
+    };
+  }
 
-  // Start / Stop
+  function startDrag(e) {
+    if (isRunning) return; // Só permite desenhar quando pausado
+    const coords = getCanvasCoords(e);
+    isDragging = true;
+    dragStartX = coords.x;
+    dragStartY = coords.y;
+  }
+
+  function moveDrag(e) {
+    if (!isDragging) return;
+    const coords = getCanvasCoords(e);
+
+    const x1 = Math.max(0, Math.min(dragStartX, coords.x));
+    const y1 = Math.max(0, Math.min(dragStartY, coords.y));
+    const x2 = Math.min(1, Math.max(dragStartX, coords.x));
+    const y2 = Math.min(1, Math.max(dragStartY, coords.y));
+
+    if (x2 - x1 > 0.05 && y2 - y1 > 0.05) {
+      boxX = x1;
+      boxY = y1;
+      boxW = x2 - x1;
+      boxH = y2 - y1;
+      salvarBoxStorage();
+      sincronizarSliders();
+    }
+  }
+
+  function endDrag() {
+    isDragging = false;
+  }
+
+  canvas.addEventListener("mousedown", startDrag);
+  window.addEventListener("mousemove", moveDrag);
+  window.addEventListener("mouseup", endDrag);
+
+  canvas.addEventListener("touchstart", startDrag, { passive: true });
+  window.addEventListener("touchmove", moveDrag, { passive: true });
+  window.addEventListener("touchend", endDrag);
+
+  function salvarBoxStorage() {
+    localStorage.setItem("boxX", boxX);
+    localStorage.setItem("boxY", boxY);
+    localStorage.setItem("boxW", boxW);
+    localStorage.setItem("boxH", boxH);
+  }
+
+  /* ================= CONTROLE DE START / STOP ================= */
   btnToggle.addEventListener("click", () => {
     isRunning = !isRunning;
     if (isRunning) {
@@ -436,7 +568,7 @@
       btnToggle.classList.add("active");
       statusDot.className = "indicator running";
       statusText.innerText = "Monitorando prateleira...";
-      prevFrameData = null; // reseta comparação
+      prevFrameData = null;
     } else {
       btnToggle.innerText = "▶️ Iniciar";
       btnToggle.classList.remove("active");
@@ -445,14 +577,57 @@
     }
   });
 
-  // Modais e Configurações
+  /* ================= MODAL & SLIDERS ================= */
   const modalConfig = document.getElementById("modal-config");
   const modalGallery = document.getElementById("modal-gallery");
   document.getElementById("btn-config").addEventListener("click", () => modalConfig.style.display = "flex");
   document.getElementById("close-config").addEventListener("click", () => modalConfig.style.display = "none");
   document.getElementById("close-gallery").addEventListener("click", () => modalGallery.style.display = "none");
 
-  // Ajuste de Sensibilidade
+  // Sliders da Caixa
+  const sliderW = document.getElementById("slider-box-w");
+  const valW = document.getElementById("val-box-w");
+  const sliderH = document.getElementById("slider-box-h");
+  const valH = document.getElementById("val-box-h");
+  const sliderX = document.getElementById("slider-box-x");
+  const valX = document.getElementById("val-box-x");
+  const sliderY = document.getElementById("slider-box-y");
+  const valY = document.getElementById("val-box-y");
+
+  function sincronizarSliders() {
+    sliderW.value = Math.round(boxW * 100);
+    valW.innerText = `${Math.round(boxW * 100)}%`;
+    sliderH.value = Math.round(boxH * 100);
+    valH.innerText = `${Math.round(boxH * 100)}%`;
+    sliderX.value = Math.round(boxX * 100);
+    valX.innerText = `${Math.round(boxX * 100)}%`;
+    sliderY.value = Math.round(boxY * 100);
+    valY.innerText = `${Math.round(boxY * 100)}%`;
+  }
+  sincronizarSliders();
+
+  sliderW.addEventListener("input", (e) => {
+    boxW = parseInt(e.target.value) / 100;
+    valW.innerText = `${e.target.value}%`;
+    salvarBoxStorage();
+  });
+  sliderH.addEventListener("input", (e) => {
+    boxH = parseInt(e.target.value) / 100;
+    valH.innerText = `${e.target.value}%`;
+    salvarBoxStorage();
+  });
+  sliderX.addEventListener("input", (e) => {
+    boxX = parseInt(e.target.value) / 100;
+    valX.innerText = `${e.target.value}%`;
+    salvarBoxStorage();
+  });
+  sliderY.addEventListener("input", (e) => {
+    boxY = parseInt(e.target.value) / 100;
+    valY.innerText = `${e.target.value}%`;
+    salvarBoxStorage();
+  });
+
+  // Sensibilidade
   const sliderSens = document.getElementById("slider-sens");
   const valSens = document.getElementById("val-sens");
   sliderSens.value = sensibilidade;
@@ -474,18 +649,7 @@
     valCount.innerText = `${burstCount} fotos`;
   });
 
-  // Lados
-  const btnRight = document.getElementById("side-right");
-  const btnLeft = document.getElementById("side-left");
-  function updateSideUI() {
-    btnRight.style.background = forbiddenSide === "right" ? "#ff5252" : "";
-    btnLeft.style.background = forbiddenSide === "left" ? "#ff5252" : "";
-  }
-  updateSideUI();
-  btnRight.addEventListener("click", () => { forbiddenSide = "right"; localStorage.setItem("forbiddenSide", "right"); updateSideUI(); });
-  btnLeft.addEventListener("click", () => { forbiddenSide = "left"; localStorage.setItem("forbiddenSide", "left"); updateSideUI(); });
-
-  // Galeria
+  /* ================= GALERIA & LIGHTBOX ================= */
   document.getElementById("btn-gallery").addEventListener("click", async () => {
     modalGallery.style.display = "flex";
     const eventos = await obterEventos();
@@ -516,7 +680,25 @@
     });
   });
 
-  document.getElementById("lightbox").addEventListener("click", () => document.getElementById("lightbox").style.display = "none");
+  // Botão Voltar do Lightbox
+  const lightbox = document.getElementById("lightbox");
+  const btnCloseLightbox = document.getElementById("btn-close-lightbox");
+
+  function fecharLightbox() {
+    lightbox.style.display = "none";
+  }
+
+  btnCloseLightbox.addEventListener("click", (e) => {
+    e.stopPropagation();
+    fecharLightbox();
+  });
+
+  lightbox.addEventListener("click", (e) => {
+    if (e.target !== document.getElementById("lightbox-img")) {
+      fecharLightbox();
+    }
+  });
+
   document.getElementById("btn-clear").addEventListener("click", async () => {
     if (confirm("Apagar todos os registros da galeria?")) {
       const tx = db.transaction("eventos", "readwrite");
