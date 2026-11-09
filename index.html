@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Monitor da Lojinha - Caixa Delimitadora</title>
+  <title>Monitor da Lojinha - Caixa Ajustável</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -14,6 +14,7 @@
       width: 100vw;
       height: 100vh;
       user-select: none;
+      touch-action: none;
     }
     #app-container {
       position: relative;
@@ -223,33 +224,6 @@
     <button class="close-btn" id="close-config">&times;</button>
   </div>
   <div class="modal-body">
-    <!-- Ajuste da Caixa Delimitadora (Largura e Altura) -->
-    <div class="config-card">
-      <div class="config-title">📦 Caixa Delimitadora da Prateleira</div>
-      <div class="config-desc">Arraste o dedo na tela para desenhar a caixa diretamente sobre a prateleira, ou ajuste as dimensões abaixo:</div>
-      
-      <div class="slider-row">
-        <label>Largura:</label>
-        <input type="range" id="slider-box-w" min="10" max="95" step="1" value="50">
-        <span class="slider-val" id="val-box-w">50%</span>
-      </div>
-      <div class="slider-row">
-        <label>Altura:</label>
-        <input type="range" id="slider-box-h" min="10" max="95" step="1" value="60">
-        <span class="slider-val" id="val-box-h">60%</span>
-      </div>
-      <div class="slider-row">
-        <label>Posição X:</label>
-        <input type="range" id="slider-box-x" min="0" max="90" step="1" value="45">
-        <span class="slider-val" id="val-box-x">45%</span>
-      </div>
-      <div class="slider-row">
-        <label>Posição Y:</label>
-        <input type="range" id="slider-box-y" min="0" max="90" step="1" value="20">
-        <span class="slider-val" id="val-box-y">20%</span>
-      </div>
-    </div>
-
     <!-- Sensibilidade -->
     <div class="config-card">
       <div class="config-title">🎚️ Sensibilidade ao Movimento</div>
@@ -269,6 +243,32 @@
         <label>Fotos:</label>
         <input type="range" id="slider-count" min="1" max="5" step="1" value="3">
         <span class="slider-val" id="val-count">3 fotos</span>
+      </div>
+    </div>
+
+    <!-- Ajustes Numéricos Manuais de Posição / Tamanho -->
+    <div class="config-card">
+      <div class="config-title">📐 Ajuste Manual dos Controles</div>
+      <div class="config-desc">Você pode arrastar diretamente as bolinhas e bordas no visor, ou ajustar aqui:</div>
+      <div class="slider-row">
+        <label>Largura:</label>
+        <input type="range" id="slider-box-w" min="10" max="95" step="1" value="50">
+        <span class="slider-val" id="val-box-w">50%</span>
+      </div>
+      <div class="slider-row">
+        <label>Altura:</label>
+        <input type="range" id="slider-box-h" min="10" max="95" step="1" value="60">
+        <span class="slider-val" id="val-box-h">60%</span>
+      </div>
+      <div class="slider-row">
+        <label>Posição X:</label>
+        <input type="range" id="slider-box-x" min="0" max="90" step="1" value="45">
+        <span class="slider-val" id="val-box-x">45%</span>
+      </div>
+      <div class="slider-row">
+        <label>Posição Y:</label>
+        <input type="range" id="slider-box-y" min="0" max="90" step="1" value="20">
+        <span class="slider-val" id="val-box-y">20%</span>
       </div>
     </div>
   </div>
@@ -325,7 +325,7 @@
   let isRunning = false;
 
   // Caixa Delimitadora (X, Y, Largura, Altura em percentual de 0 a 1)
-  let boxX = parseFloat(localStorage.getItem("boxX")) || 0.45;
+  let boxX = parseFloat(localStorage.getItem("boxX")) || 0.40;
   let boxY = parseFloat(localStorage.getItem("boxY")) || 0.20;
   let boxW = parseFloat(localStorage.getItem("boxW")) || 0.50;
   let boxH = parseFloat(localStorage.getItem("boxH")) || 0.60;
@@ -337,10 +337,12 @@
   let isCapturing = false;
   let prevFrameData = null;
 
-  // Variáveis para desenhar retângulo arrastando o dedo na tela
-  let isDragging = false;
-  let dragStartX = 0;
-  let dragStartY = 0;
+  // Modo de manipulação interativa da caixa
+  // 'none', 'move', 'resize-left', 'resize-right', 'resize-top', 'resize-bottom',
+  // 'resize-tl', 'resize-tr', 'resize-bl', 'resize-br'
+  let dragMode = "none";
+  let dragStartCoords = { x: 0, y: 0 };
+  let initialBox = { x: 0, y: 0, w: 0, h: 0 };
 
   const video = document.getElementById("input-video");
   const canvas = document.getElementById("output-canvas");
@@ -349,7 +351,6 @@
   const statusDot = document.getElementById("status-dot");
   const btnToggle = document.getElementById("btn-toggle");
 
-  // Canvas auxiliar em 160x120 para análise instantânea de pixels
   const motionCanvas = document.createElement("canvas");
   motionCanvas.width = 160;
   motionCanvas.height = 120;
@@ -365,7 +366,7 @@
       video.srcObject = stream;
       video.onloadedmetadata = () => {
         video.play();
-        statusText.innerText = "Pronto. Arraste na tela para demarcar a prateleira.";
+        statusText.innerText = "Pronto. Arraste as bordas/bolinhas para ajustar.";
         requestAnimationFrame(renderLoop);
       };
     } catch (e) {
@@ -393,7 +394,6 @@
     let pixelsMudados = 0;
     const totalPixelsZona = Math.max(1, (endX - startX) * (endY - startY));
 
-    // Varre apenas os pixels dentro da caixa delimitadora
     for (let y = startY; y < endY; y += 2) {
       for (let x = startX; x < endX; x += 2) {
         const i = (y * motionCanvas.width + x) * 4;
@@ -410,7 +410,6 @@
 
     prevFrameData = data;
 
-    // Calibrado: 0.6% de alteração dentro da caixa (mão ou braço entrando)
     const taxaMudanca = (pixelsMudados / (totalPixelsZona / 4)) * 100;
     return taxaMudanca > 0.6;
   }
@@ -428,36 +427,53 @@
       const pxW = canvas.width * boxW;
       const pxH = canvas.height * boxH;
 
-      // 1. Desenha o interior da caixa delimitadora
+      // 1. Interior sombreado da caixa
       ctx.fillStyle = isRunning ? "rgba(255, 0, 0, 0.22)" : "rgba(255, 165, 0, 0.18)";
       ctx.fillRect(pxX, pxY, pxW, pxH);
 
-      // 2. Bordas da caixa
-      ctx.strokeStyle = isRunning ? "#ff3b30" : "#ff9100";
-      ctx.lineWidth = 4;
-      ctx.setLineDash([8, 6]);
+      // 2. Linhas de contorno da caixa
+      ctx.strokeStyle = isRunning ? "#ff3b30" : "#00e676";
+      ctx.lineWidth = isRunning ? 3 : 4;
+      ctx.setLineDash(isRunning ? [] : [6, 4]);
       ctx.strokeRect(pxX, pxY, pxW, pxH);
       ctx.setLineDash([]);
 
-      // 3. Cantos reforçados nos vértices da caixa
-      const corner = 18;
-      ctx.lineWidth = 6;
-      ctx.strokeStyle = isRunning ? "#ff3b30" : "#00e676";
-      // Topo esquerdo
-      ctx.beginPath(); ctx.moveTo(pxX, pxY + corner); ctx.lineTo(pxX, pxY); ctx.lineTo(pxX + corner, pxY); ctx.stroke();
-      // Topo direito
-      ctx.beginPath(); ctx.moveTo(pxX + pxW - corner, pxY); ctx.lineTo(pxX + pxW, pxY); ctx.lineTo(pxX + pxW, pxY + corner); ctx.stroke();
-      // Fundo esquerdo
-      ctx.beginPath(); ctx.moveTo(pxX, pxY + pxH - corner); ctx.lineTo(pxX, pxY + pxH); ctx.lineTo(pxX + corner, pxY + pxH); ctx.stroke();
-      // Fundo direito
-      ctx.beginPath(); ctx.moveTo(pxX + pxW - corner, pxY + pxH); ctx.lineTo(pxX + pxW, pxY + pxH); ctx.lineTo(pxX + pxW, pxY + pxH - corner); ctx.stroke();
+      // 3. Alças e Bolinhas de Redimensionamento (Visíveis quando pausado para ajuste)
+      if (!isRunning) {
+        // Alças nos 4 cantos e no meio das bordas
+        const handleRadius = Math.max(10, Math.min(18, canvas.width * 0.015));
+        const handles = [
+          { x: pxX, y: pxY },                           // TL
+          { x: pxX + pxW, y: pxY },                     // TR
+          { x: pxX, y: pxY + pxH },                     // BL
+          { x: pxX + pxW, y: pxY + pxH },               // BR
+          { x: pxX + pxW / 2, y: pxY },                 // Top center
+          { x: pxX + pxW / 2, y: pxY + pxH },           // Bottom center
+          { x: pxX, y: pxY + pxH / 2 },                 // Left center
+          { x: pxX + pxW, y: pxY + pxH / 2 }            // Right center
+        ];
 
-      // 4. Rótulo informativo
-      ctx.font = "bold 15px sans-serif";
-      ctx.fillStyle = isRunning ? "#ff3b30" : "#ff9100";
-      ctx.fillText(isRunning ? "⚠️ ÁREA MONITORADA" : "📐 ARRASTE P/ REDIMENSIONAR", pxX + 8, Math.max(25, pxY - 8));
+        handles.forEach(h => {
+          ctx.beginPath();
+          ctx.arc(h.x, h.y, handleRadius, 0, 2 * Math.PI);
+          ctx.fillStyle = "#ffffff";
+          ctx.fill();
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = "#00e676";
+          ctx.stroke();
+        });
 
-      // 5. Verificação de Movimento se estiver ativo
+        // Dica visual no topo da caixa
+        ctx.font = "bold 15px sans-serif";
+        ctx.fillStyle = "#00e676";
+        ctx.fillText("✋ ARRASTE AS BORDAS OU BOLINHAS P/ AJUSTAR", pxX + 8, Math.max(26, pxY - 12));
+      } else {
+        ctx.font = "bold 16px sans-serif";
+        ctx.fillStyle = "#ff3b30";
+        ctx.fillText("⚠️ PRATELEIRA MONITORADA", pxX + 8, Math.max(26, pxY - 10));
+      }
+
+      // 4. Verificação de Movimento se estiver ativo
       if (isRunning && !cooldown && !isCapturing) {
         if (checarMovimentoNaCaixa()) {
           dispararCaptura();
@@ -503,55 +519,117 @@
     }, 5000);
   }
 
-  /* ================= ARRASTAR NA TELA PARA CRIAR A CAIXA ================= */
-  function getCanvasCoords(e) {
+  /* ================= ARRASTAR BORDAS E CANTOS PARA REDIMENSIONAR ================= */
+  function getCanvasPixels(e) {
     const rect = canvas.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     return {
-      x: (clientX - rect.left) / rect.width,
-      y: (clientY - rect.top) / rect.height
+      x: ((clientX - rect.left) / rect.width) * canvas.width,
+      y: ((clientY - rect.top) / rect.height) * canvas.height,
+      normX: (clientX - rect.left) / rect.width,
+      normY: (clientY - rect.top) / rect.height
     };
   }
 
-  function startDrag(e) {
-    if (isRunning) return; // Só permite desenhar quando pausado
-    const coords = getCanvasCoords(e);
-    isDragging = true;
-    dragStartX = coords.x;
-    dragStartY = coords.y;
-  }
+  function handleTouchStart(e) {
+    if (isRunning) return; // Não redimensiona enquanto estiver monitorando
 
-  function moveDrag(e) {
-    if (!isDragging) return;
-    const coords = getCanvasCoords(e);
+    const p = getCanvasPixels(e);
+    const pxX = canvas.width * boxX;
+    const pxY = canvas.height * boxY;
+    const pxW = canvas.width * boxW;
+    const pxH = canvas.height * boxH;
 
-    const x1 = Math.max(0, Math.min(dragStartX, coords.x));
-    const y1 = Math.max(0, Math.min(dragStartY, coords.y));
-    const x2 = Math.min(1, Math.max(dragStartX, coords.x));
-    const y2 = Math.min(1, Math.max(dragStartY, coords.y));
+    // Área de tolerância de toque (generosa para dedo no celular)
+    const tol = Math.max(30, canvas.width * 0.05);
 
-    if (x2 - x1 > 0.05 && y2 - y1 > 0.05) {
-      boxX = x1;
-      boxY = y1;
-      boxW = x2 - x1;
-      boxH = y2 - y1;
-      salvarBoxStorage();
-      sincronizarSliders();
+    const nearLeft = Math.abs(p.x - pxX) < tol && p.y >= pxY - tol && p.y <= pxY + pxH + tol;
+    const nearRight = Math.abs(p.x - (pxX + pxW)) < tol && p.y >= pxY - tol && p.y <= pxY + pxH + tol;
+    const nearTop = Math.abs(p.y - pxY) < tol && p.x >= pxX - tol && p.x <= pxX + pxW + tol;
+    const nearBottom = Math.abs(p.y - (pxY + pxH)) < tol && p.x >= pxX - tol && p.x <= pxX + pxW + tol;
+
+    dragStartCoords = { normX: p.normX, normY: p.normY };
+    initialBox = { x: boxX, y: boxY, w: boxW, h: boxH };
+
+    // 1. Cantos prioritários
+    if (nearLeft && nearTop) dragMode = "resize-tl";
+    else if (nearRight && nearTop) dragMode = "resize-tr";
+    else if (nearLeft && nearBottom) dragMode = "resize-bl";
+    else if (nearRight && nearBottom) dragMode = "resize-br";
+    // 2. Bordas
+    else if (nearLeft) dragMode = "resize-left";
+    else if (nearRight) dragMode = "resize-right";
+    else if (nearTop) dragMode = "resize-top";
+    else if (nearBottom) dragMode = "resize-bottom";
+    // 3. Toque dentro da caixa (move a caixa inteira de lugar)
+    else if (p.x > pxX && p.x < pxX + pxW && p.y > pxY && p.y < pxY + pxH) {
+      dragMode = "move";
+    } else {
+      dragMode = "none";
     }
   }
 
-  function endDrag() {
-    isDragging = false;
+  function handleTouchMove(e) {
+    if (dragMode === "none" || isRunning) return;
+
+    const p = getCanvasPixels(e);
+    const dx = p.normX - dragStartCoords.normX;
+    const dy = p.normY - dragStartCoords.normY;
+    const minSize = 0.08;
+
+    if (dragMode === "move") {
+      boxX = Math.max(0, Math.min(1 - initialBox.w, initialBox.x + dx));
+      boxY = Math.max(0, Math.min(1 - initialBox.h, initialBox.y + dy));
+    } else if (dragMode === "resize-right") {
+      boxW = Math.max(minSize, Math.min(1 - initialBox.x, initialBox.w + dx));
+    } else if (dragMode === "resize-bottom") {
+      boxH = Math.max(minSize, Math.min(1 - initialBox.y, initialBox.h + dy));
+    } else if (dragMode === "resize-left") {
+      const newX = Math.max(0, Math.min(initialBox.x + initialBox.w - minSize, initialBox.x + dx));
+      boxW = initialBox.w + (initialBox.x - newX);
+      boxX = newX;
+    } else if (dragMode === "resize-top") {
+      const newY = Math.max(0, Math.min(initialBox.y + initialBox.h - minSize, initialBox.y + dy));
+      boxH = initialBox.h + (initialBox.y - newY);
+      boxY = newY;
+    } else if (dragMode === "resize-tr") {
+      boxW = Math.max(minSize, Math.min(1 - initialBox.x, initialBox.w + dx));
+      const newY = Math.max(0, Math.min(initialBox.y + initialBox.h - minSize, initialBox.y + dy));
+      boxH = initialBox.h + (initialBox.y - newY);
+      boxY = newY;
+    } else if (dragMode === "resize-tl") {
+      const newX = Math.max(0, Math.min(initialBox.x + initialBox.w - minSize, initialBox.x + dx));
+      boxW = initialBox.w + (initialBox.x - newX);
+      boxX = newX;
+      const newY = Math.max(0, Math.min(initialBox.y + initialBox.h - minSize, initialBox.y + dy));
+      boxH = initialBox.h + (initialBox.y - newY);
+      boxY = newY;
+    } else if (dragMode === "resize-br") {
+      boxW = Math.max(minSize, Math.min(1 - initialBox.x, initialBox.w + dx));
+      boxH = Math.max(minSize, Math.min(1 - initialBox.y, initialBox.h + dy));
+    } else if (dragMode === "resize-bl") {
+      const newX = Math.max(0, Math.min(initialBox.x + initialBox.w - minSize, initialBox.x + dx));
+      boxW = initialBox.w + (initialBox.x - newX);
+      boxX = newX;
+      boxH = Math.max(minSize, Math.min(1 - initialBox.y, initialBox.h + dy));
+    }
+
+    salvarBoxStorage();
+    sincronizarSliders();
   }
 
-  canvas.addEventListener("mousedown", startDrag);
-  window.addEventListener("mousemove", moveDrag);
-  window.addEventListener("mouseup", endDrag);
+  function handleTouchEnd() {
+    dragMode = "none";
+  }
 
-  canvas.addEventListener("touchstart", startDrag, { passive: true });
-  window.addEventListener("touchmove", moveDrag, { passive: true });
-  window.addEventListener("touchend", endDrag);
+  canvas.addEventListener("mousedown", handleTouchStart);
+  window.addEventListener("mousemove", handleTouchMove);
+  window.addEventListener("mouseup", handleTouchEnd);
+
+  canvas.addEventListener("touchstart", handleTouchStart, { passive: true });
+  window.addEventListener("touchmove", handleTouchMove, { passive: true });
+  window.addEventListener("touchend", handleTouchEnd);
 
   function salvarBoxStorage() {
     localStorage.setItem("boxX", boxX);
@@ -573,7 +651,7 @@
       btnToggle.innerText = "▶️ Iniciar";
       btnToggle.classList.remove("active");
       statusDot.className = "indicator";
-      statusText.innerText = "Pausado para ajuste.";
+      statusText.innerText = "Pausado. Arraste as bordas p/ regular.";
     }
   });
 
