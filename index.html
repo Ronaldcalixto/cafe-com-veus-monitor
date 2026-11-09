@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Monitor da Lojinha - Detecção e Galeria</title>
+  <title>Monitor da Lojinha - Detector Dinâmico</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       background: #000;
       color: #fff;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       overflow: hidden;
       width: 100vw;
       height: 100vh;
@@ -19,8 +19,6 @@
       position: relative;
       width: 100vw;
       height: 100vh;
-      display: flex;
-      flex-direction: column;
     }
     video { display: none; }
     canvas {
@@ -29,7 +27,8 @@
       object-fit: cover;
       display: block;
     }
-    /* Top Bar */
+
+    /* Barra Superior */
     .top-bar {
       position: absolute;
       top: 12px;
@@ -43,29 +42,28 @@
       gap: 8px;
     }
     .status-badge {
-      background: rgba(0, 0, 0, 0.75);
-      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(0, 0, 0, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.2);
       padding: 8px 14px;
       border-radius: 20px;
       font-size: 13px;
       pointer-events: auto;
       backdrop-filter: blur(8px);
+      max-width: 50%;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      max-width: 45%;
     }
-    .status-badge .indicator {
+    .indicator {
       display: inline-block;
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: #888;
+      background: #ff9100;
       margin-right: 6px;
     }
-    .status-badge .indicator.running { background: #00e676; }
-    .status-badge .indicator.stopped { background: #ff9100; }
-    .status-badge .indicator.error { background: #ff5252; }
+    .indicator.running { background: #00e676; }
+    .indicator.alert { background: #ff3b30; }
 
     .btn-group {
       display: flex;
@@ -73,35 +71,26 @@
       pointer-events: auto;
     }
     .btn-icon {
-      background: rgba(0, 0, 0, 0.75);
+      background: rgba(0, 0, 0, 0.8);
       border: 1px solid rgba(255, 255, 255, 0.2);
       color: #fff;
       padding: 8px 12px;
       border-radius: 20px;
       font-size: 13px;
       cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      backdrop-filter: blur(8px);
     }
-    .btn-icon:active { background: rgba(255, 255, 255, 0.2); }
-
-    /* Botão Start/Stop com destaque */
-    #btn-toggle-monitor {
+    #btn-toggle {
       background: #00e676;
       color: #000;
       font-weight: bold;
       border: none;
-      box-shadow: 0 0 10px rgba(0, 230, 118, 0.4);
     }
-    #btn-toggle-monitor.stopped {
+    #btn-toggle.active {
       background: #ff5252;
       color: #fff;
-      box-shadow: 0 0 10px rgba(255, 82, 82, 0.4);
     }
 
-    /* Flash Effect */
+    /* Flash */
     #flash-overlay {
       position: absolute;
       top: 0; left: 0; width: 100%; height: 100%;
@@ -112,55 +101,7 @@
       z-index: 20;
     }
 
-    /* Stealth Mode Overlay */
-    #stealth-overlay {
-      position: absolute;
-      top: 0; left: 0; width: 100%; height: 100%;
-      background: #000;
-      display: none;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      z-index: 50;
-      color: #555;
-      font-size: 13px;
-      text-align: center;
-      padding: 20px;
-    }
-
-    /* Modal / Camera Alert Overlay */
-    #alert-overlay {
-      position: absolute;
-      top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0, 0, 0, 0.9);
-      display: none;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      z-index: 80;
-      padding: 24px;
-      text-align: center;
-    }
-    #alert-box {
-      background: #1e1e1e;
-      border: 1px solid #ff5252;
-      border-radius: 14px;
-      padding: 20px;
-      max-width: 400px;
-    }
-    #alert-box h3 { color: #ff5252; margin-bottom: 12px; }
-    #alert-box p { font-size: 13px; color: #ccc; line-height: 1.5; margin-bottom: 16px; }
-    #btn-retry-camera {
-      background: #00e676;
-      border: none;
-      color: #000;
-      font-weight: bold;
-      padding: 10px 20px;
-      border-radius: 8px;
-      cursor: pointer;
-    }
-
-    /* Modals / Drawers */
+    /* Modais */
     .modal {
       position: absolute;
       top: 0; left: 0; width: 100%; height: 100%;
@@ -178,680 +119,349 @@
       align-items: center;
     }
     .modal-title { font-size: 18px; font-weight: bold; }
-    .close-btn {
-      background: none;
-      border: none;
-      color: #aaa;
-      font-size: 24px;
-      cursor: pointer;
-      padding: 4px 8px;
-    }
-    .modal-body {
-      flex: 1;
-      overflow-y: auto;
-      padding: 20px;
-    }
+    .close-btn { background: none; border: none; color: #aaa; font-size: 24px; cursor: pointer; }
+    .modal-body { flex: 1; overflow-y: auto; padding: 20px; }
 
-    /* Config Panel Items */
-    .config-section {
-      margin-bottom: 24px;
-      background: rgba(255, 255, 255, 0.04);
-      padding: 16px;
+    .config-card {
+      background: rgba(255, 255, 255, 0.05);
+      padding: 14px;
       border-radius: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      margin-bottom: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
     }
-    .config-title { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
-    .config-desc { font-size: 12px; color: #888; margin-bottom: 14px; line-height: 1.4; }
-    .preset-btns {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-      margin-bottom: 12px;
-    }
-    .preset-btn {
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      color: #fff;
-      padding: 10px 6px;
-      border-radius: 8px;
-      font-size: 12px;
-      cursor: pointer;
-      text-align: center;
-    }
-    .preset-btn.active {
-      background: #00e676;
-      color: #000;
-      font-weight: bold;
-      border-color: #00e676;
-    }
-    .toggle-group {
-      display: flex;
-      gap: 8px;
-    }
-    .toggle-opt {
-      flex: 1;
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      color: #fff;
-      padding: 10px;
-      border-radius: 8px;
-      font-size: 13px;
-      cursor: pointer;
-      text-align: center;
-    }
-    .toggle-opt.active {
-      background: #ff5252;
-      color: #fff;
-      font-weight: bold;
-      border-color: #ff5252;
-    }
-    .slider-container { display: flex; align-items: center; gap: 12px; }
-    .slider-container input { flex: 1; }
-    .slider-val { font-size: 14px; font-weight: bold; min-width: 50px; text-align: right; }
+    .config-title { font-size: 14px; font-weight: bold; margin-bottom: 6px; }
+    .config-desc { font-size: 12px; color: #888; margin-bottom: 10px; }
+    .slider-row { display: flex; align-items: center; gap: 10px; }
+    .slider-row input { flex: 1; }
+    .slider-val { font-size: 13px; font-weight: bold; min-width: 50px; text-align: right; }
 
-    /* Gallery Cards */
+    /* Galeria */
     .event-card {
       background: rgba(255, 255, 255, 0.05);
       border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 12px;
-      padding: 14px;
-      margin-bottom: 16px;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 12px;
     }
-    .event-meta {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 10px;
-      font-size: 13px;
-      color: #ccc;
-    }
-    .thumb-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
-      gap: 8px;
-    }
-    .thumb-grid img {
-      width: 100%;
-      aspect-ratio: 4/3;
-      object-fit: cover;
-      border-radius: 6px;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      cursor: pointer;
-    }
+    .event-meta { font-size: 12px; color: #aaa; margin-bottom: 8px; }
+    .thumb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; }
+    .thumb-grid img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 6px; cursor: pointer; }
 
     /* Lightbox */
     #lightbox {
-      position: fixed;
-      top: 0; left: 0; width: 100vw; height: 100vh;
-      background: rgba(0, 0, 0, 0.95);
-      z-index: 200;
-      display: none;
-      justify-content: center;
-      align-items: center;
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(0,0,0,0.95); z-index: 200; display: none;
+      justify-content: center; align-items: center;
     }
-    #lightbox img {
-      max-width: 95vw;
-      max-height: 90vh;
-      border-radius: 8px;
-      border: 1px solid #444;
-    }
+    #lightbox img { max-width: 95vw; max-height: 90vh; border-radius: 8px; }
   </style>
-
-  <!-- MediaPipe Hands & Drawing Utils via CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
 <div id="app-container">
   <div class="top-bar">
-    <div class="status-badge" id="status-badge">
+    <div class="status-badge">
       <span class="indicator" id="status-dot"></span>
-      <span id="status-text">Pronto. Clique em Iniciar</span>
+      <span id="status-text">Carregando câmera...</span>
     </div>
     <div class="btn-group">
-      <!-- Botão Start / Stop -->
-      <button class="btn-icon" id="btn-toggle-monitor">▶️ Iniciar</button>
-      <button class="btn-icon" id="btn-stealth" title="Modo tela preta economizador">🌙 Tela Preta</button>
+      <button class="btn-icon" id="btn-toggle">▶️ Iniciar</button>
       <button class="btn-icon" id="btn-config">⚙️ Ajustes</button>
       <button class="btn-icon" id="btn-gallery">🖼️ Galeria</button>
     </div>
   </div>
 
   <div id="flash-overlay"></div>
-  <div id="stealth-overlay">
-    <div>Monitoramento Ativo em Segundo Plano<br><br>Toque duas vezes para reativar o visor</div>
-  </div>
-
-  <!-- Alerta de Câmera -->
-  <div id="alert-overlay">
-    <div id="alert-box">
-      <h3 id="alert-title">Câmera Não Iniciada</h3>
-      <p id="alert-msg">O navegador precisa de permissão de câmera. Toque no botão abaixo para tentar liberar.</p>
-      <button id="btn-retry-camera">Ativar Câmera</button>
-    </div>
-  </div>
-
   <video id="input-video" playsinline autoplay muted></video>
   <canvas id="output-canvas"></canvas>
 </div>
 
-<!-- Modal de Configuração -->
+<!-- Modal Config -->
 <div class="modal" id="modal-config">
   <div class="modal-header">
-    <div class="modal-title">⚙️ Ajustes de Detecção & Monitoramento</div>
+    <div class="modal-title">⚙️ Ajustes do Monitor</div>
     <button class="close-btn" id="close-config">&times;</button>
   </div>
   <div class="modal-body">
-    <!-- Lado da Prateleira (Direita ou Esquerda) -->
-    <div class="config-section">
-      <div class="config-title">🚪 Lado da Zona Proibida (Prateleira)</div>
-      <div class="config-desc">
-        Indique para qual lado da linha vermelha fica a prateleira com os produtos.
-      </div>
-      <div class="toggle-group">
-        <button class="toggle-opt active" id="btn-side-right" data-side="right">👉 Lado Direito (&gt;)</button>
-        <button class="toggle-opt" id="btn-side-left" data-side="left">👈 Lado Esquerdo (&lt;)</button>
+    <div class="config-card">
+      <div class="config-title">🎚️ Sensibilidade ao Movimento</div>
+      <div class="config-desc">Quanto menor o valor, mais sensível (detecta movimentos mais sutis). Padrão recomendado: 25.</div>
+      <div class="slider-row">
+        <input type="range" id="slider-sens" min="5" max="60" step="1" value="25">
+        <span class="slider-val" id="val-sens">25</span>
       </div>
     </div>
 
-    <!-- Quantidade de Fotos -->
-    <div class="config-section">
-      <div class="config-title">📸 Quantidade de Fotos por Disparo</div>
-      <div class="config-desc">
-        Quantas fotos sequenciais serão capturadas quando a mão ultrapassar a prateleira.
-      </div>
-      <div class="slider-container">
-        <label style="font-size: 13px; color: #aaa;">Fotos capturadas:</label>
+    <div class="config-card">
+      <div class="config-title">📸 Quantidade de Fotos</div>
+      <div class="config-desc">Fotos tiradas em sequência por evento.</div>
+      <div class="slider-row">
         <input type="range" id="slider-count" min="1" max="5" step="1" value="3">
         <span class="slider-val" id="val-count">3 fotos</span>
       </div>
     </div>
 
-    <!-- Intervalo entre fotos -->
-    <div class="config-section">
-      <div class="config-title">⏱️ Intervalo entre as Fotos</div>
-      <div class="config-desc">
-        Tempo de espaçamento entre cada foto da sequência.
+    <div class="config-card">
+      <div class="config-title">🚪 Lado da Prateleira</div>
+      <div class="config-desc">Qual lado da linha vermelha deve acionar o alarme.</div>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn-icon" id="side-right" style="flex: 1; text-align: center;">👉 Lado Direito</button>
+        <button class="btn-icon" id="side-left" style="flex: 1; text-align: center;">👈 Lado Esquerdo</button>
       </div>
-      <div class="slider-container">
-        <label style="font-size: 13px; color: #aaa;">Espaçamento:</label>
-        <input type="range" id="slider-interval" min="200" max="1200" step="100" value="600">
-        <span class="slider-val" id="val-interval">600ms</span>
-      </div>
-    </div>
-
-    <!-- Taxa de Processamento (FPS) -->
-    <div class="config-section">
-      <div class="config-title">🔋 Taxa de Processamento (FPS da IA)</div>
-      <div class="config-desc">
-        Taxa de quadros analisada pela inteligência artificial. Menos FPS evita superaquecer o aparelho.
-      </div>
-      <div class="preset-btns">
-        <button class="preset-btn" data-fps="5">🔋 Econômico<br><small>5 FPS (~200ms)</small></button>
-        <button class="preset-btn active" data-fps="8">⚖️ Padrão<br><small>8 FPS (~125ms)</small></button>
-        <button class="preset-btn" data-fps="15">⚡ Alto Des.<br><small>15 FPS (~66ms)</small></button>
-      </div>
-      <div class="slider-container">
-        <input type="range" id="slider-fps" min="3" max="20" step="1" value="8">
-        <span class="slider-val" id="val-fps">8 FPS</span>
-      </div>
-    </div>
-
-    <!-- Posição do Limite -->
-    <div class="config-section">
-      <div class="config-title">📍 Posição da Linha Limite</div>
-      <div class="config-desc">
-        Você pode tocar diretamente na tela principal para posicionar a linha.
-      </div>
-      <div class="slider-container">
-        <input type="range" id="slider-limite" min="10" max="90" step="1" value="65">
-        <span class="slider-val" id="val-limite">65%</span>
-      </div>
-    </div>
-
-    <!-- Botão de Teste Direto -->
-    <div class="config-section" style="text-align: center;">
-      <button class="btn-icon" id="btn-test-capture" style="margin: 0 auto; background: #2979ff; border: none; padding: 12px 20px;">
-        📸 Testar Disparo Manual e Salvar na Galeria
-      </button>
     </div>
   </div>
 </div>
 
-<!-- Modal da Galeria Local -->
+<!-- Modal Galeria -->
 <div class="modal" id="modal-gallery">
   <div class="modal-header">
-    <div class="modal-title">🖼️ Registros de Acesso (Hoje)</div>
+    <div class="modal-title">🖼️ Registros Capturados</div>
     <div style="display: flex; gap: 8px;">
-      <button class="btn-icon" id="btn-clear-db" style="color: #ff5252;">🗑️ Limpar Tudo</button>
+      <button class="btn-icon" id="btn-clear" style="color: #ff5252;">🗑️ Limpar</button>
       <button class="close-btn" id="close-gallery">&times;</button>
     </div>
   </div>
   <div class="modal-body" id="gallery-container">
-    <div style="text-align: center; color: #888; margin-top: 40px;">Nenhum registro capturado até o momento.</div>
+    <div style="text-align: center; color: #888; margin-top: 40px;">Nenhum registro ainda.</div>
   </div>
 </div>
 
-<!-- Lightbox Zoom -->
-<div id="lightbox">
-  <img id="lightbox-img" src="" alt="Ampliação">
-</div>
+<div id="lightbox"><img id="lightbox-img" src="" alt="Zoom"></div>
 
 <script>
-  /* =========================================================================
-     1. BANCO DE DADOS LOCAL (IndexedDB + Memória Fallback)
-     ========================================================================= */
+  /* ================= BANCO LOCAL (IndexedDB) ================= */
   let db;
-  const DB_NAME = "LojinhaMonitorDB";
-  const DB_VERSION = 1;
-  let fallbackMemoryEvents = [];
-
   function initDB() {
-    return new Promise((resolve) => {
-      try {
-        const request = indexedDB.open(DB_NAME, DB_VERSION);
-        request.onupgradeneeded = (e) => {
-          db = e.target.result;
-          if (!db.objectStoreNames.contains("eventos")) {
-            db.createObjectStore("eventos", { keyPath: "id", autoIncrement: true });
-          }
-        };
-        request.onsuccess = (e) => {
-          db = e.target.result;
-          resolve(db);
-        };
-        request.onerror = (e) => {
-          console.warn("IndexedDB indisponível, usando armazenamento em memória:", e);
-          resolve(null);
-        };
-      } catch (err) {
-        console.warn("Erro ao iniciar IndexedDB:", err);
-        resolve(null);
-      }
+    return new Promise((res) => {
+      const req = indexedDB.open("LojinhaLiteDB", 1);
+      req.onupgradeneeded = (e) => e.target.result.createObjectStore("eventos", { keyPath: "id", autoIncrement: true });
+      req.onsuccess = (e) => { db = e.target.result; res(); };
+      req.onerror = () => res();
     });
   }
-
   function salvarEvento(evento) {
-    return new Promise((resolve) => {
-      if (!db) {
-        fallbackMemoryEvents.push(evento);
-        try {
-          // Backup simples em localStorage de até 5 eventos
-          const mini = fallbackMemoryEvents.slice(-5);
-          localStorage.setItem("fallback_events", JSON.stringify(mini));
-        } catch(e) {}
-        return resolve();
-      }
-      try {
-        const tx = db.transaction(["eventos"], "readwrite");
-        const store = tx.objectStore("eventos");
-        store.add(evento);
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => {
-          fallbackMemoryEvents.push(evento);
-          resolve();
-        };
-      } catch (err) {
-        fallbackMemoryEvents.push(evento);
-        resolve();
-      }
-    });
+    if (!db) return;
+    const tx = db.transaction("eventos", "readwrite");
+    tx.objectStore("eventos").add(evento);
   }
-
   function obterEventos() {
-    return new Promise((resolve) => {
-      if (!db) {
-        return resolve(fallbackMemoryEvents);
-      }
-      try {
-        const tx = db.transaction(["eventos"], "readonly");
-        const store = tx.objectStore("eventos");
-        const request = store.getAll();
-        request.onsuccess = () => resolve(request.result || fallbackMemoryEvents);
-        request.onerror = () => resolve(fallbackMemoryEvents);
-      } catch (err) {
-        resolve(fallbackMemoryEvents);
-      }
+    return new Promise((res) => {
+      if (!db) return res([]);
+      const req = db.transaction("eventos", "readonly").objectStore("eventos").getAll();
+      req.onsuccess = () => res(req.result || []);
+      req.onerror = () => res([]);
     });
   }
 
-  function limparEventos() {
-    return new Promise((resolve) => {
-      fallbackMemoryEvents = [];
-      try { localStorage.removeItem("fallback_events"); } catch(e) {}
-      if (!db) return resolve();
-      try {
-        const tx = db.transaction(["eventos"], "readwrite");
-        const store = tx.objectStore("eventos");
-        store.clear();
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => resolve();
-      } catch (err) {
-        resolve();
-      }
-    });
-  }
-
-  /* =========================================================================
-     2. PARÂMETROS E ESTADO DO MONITORAMENTO
-     ========================================================================= */
-  let isMonitoringActive = false; // Começa pausado até clicar em INICIAR
-  let targetFPS = parseInt(localStorage.getItem("targetFPS")) || 8;
-  let burstCount = parseInt(localStorage.getItem("burstCount")) || 3;
-  let burstInterval = parseInt(localStorage.getItem("burstInterval")) || 600;
+  /* ================= VARIÁVEIS E ESTADO ================= */
+  let isRunning = false;
   let limiteXPercent = parseFloat(localStorage.getItem("limiteXPercent")) || 0.65;
-  let forbiddenSide = localStorage.getItem("forbiddenSide") || "right"; // "right" ou "left"
+  let forbiddenSide = localStorage.getItem("forbiddenSide") || "right";
+  let sensibilidade = parseInt(localStorage.getItem("sensibilidade")) || 25;
+  let burstCount = parseInt(localStorage.getItem("burstCount")) || 3;
 
-  let lastProcessTime = 0;
-  let isCapturingBurst = false;
   let cooldown = false;
-  let isMediaPipeReady = false;
+  let isCapturing = false;
+  let prevFrameData = null;
 
-  const videoElement = document.getElementById("input-video");
-  const canvasElement = document.getElementById("output-canvas");
-  const canvasCtx = canvasElement.getContext("2d");
-  const flashOverlay = document.getElementById("flash-overlay");
+  const video = document.getElementById("input-video");
+  const canvas = document.getElementById("output-canvas");
+  const ctx = canvas.getContext("2d");
   const statusText = document.getElementById("status-text");
   const statusDot = document.getElementById("status-dot");
-  const btnToggle = document.getElementById("btn-toggle-monitor");
+  const btnToggle = document.getElementById("btn-toggle");
 
-  async function requestWakeLock() {
+  // Canvas auxiliar em baixa resolução só para calcular movimento instantaneamente
+  const motionCanvas = document.createElement("canvas");
+  motionCanvas.width = 160;
+  motionCanvas.height = 120;
+  const motionCtx = motionCanvas.getContext("2d", { willReadFrequently: true });
+
+  /* ================= CÂMERA ================= */
+  async function initCamera() {
     try {
-      if ("wakeLock" in navigator) {
-        await navigator.wakeLock.request("screen");
-      }
-    } catch (err) {}
-  }
-  requestWakeLock();
-
-  /* =========================================================================
-     3. CONTROLE DE START / STOP
-     ========================================================================= */
-  function setMonitoringState(active) {
-    isMonitoringActive = active;
-    if (isMonitoringActive) {
-      btnToggle.innerText = "⏹️ Parar";
-      btnToggle.classList.add("stopped");
-      statusDot.className = "indicator running";
-      statusText.innerText = "Monitoramento ATIVO";
-    } else {
-      btnToggle.innerText = "▶️ Iniciar";
-      btnToggle.classList.remove("stopped");
-      statusDot.className = "indicator stopped";
-      statusText.innerText = "Pausado. Clique em Iniciar";
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } },
+        audio: false
+      });
+      video.srcObject = stream;
+      video.onloadedmetadata = () => {
+        video.play();
+        statusText.innerText = "Pronto. Toque na tela para calibrar o limite.";
+        requestAnimationFrame(renderLoop);
+      };
+    } catch (e) {
+      statusText.innerText = "Erro ao acessar câmera (Verifique permissões / HTTPS)";
+      statusDot.className = "indicator alert";
     }
   }
 
-  btnToggle.addEventListener("click", () => {
-    setMonitoringState(!isMonitoringActive);
-  });
+  /* ================= MOTOR DE DETECÇÃO DE MOVIMENTO ================= */
+  function checarMovimentoNaZona(linhaXNorm) {
+    motionCtx.drawImage(video, 0, 0, motionCanvas.width, motionCanvas.height);
+    const curr = motionCtx.getImageData(0, 0, motionCanvas.width, motionCanvas.height);
+    const data = curr.data;
 
-  /* =========================================================================
-     4. DISPARO SEQUENCIAL (BURST SHOT) & CAPTURA
-     ========================================================================= */
-  function flashScreen() {
-    flashOverlay.style.opacity = "0.7";
-    setTimeout(() => { flashOverlay.style.opacity = "0"; }, 150);
+    if (!prevFrameData) {
+      prevFrameData = data;
+      return false;
+    }
+
+    const startX = forbiddenSide === "right" ? Math.floor(motionCanvas.width * linhaXNorm) : 0;
+    const endX = forbiddenSide === "right" ? motionCanvas.width : Math.floor(motionCanvas.width * linhaXNorm);
+
+    let pixelsMudados = 0;
+    const totalPixelsZona = (endX - startX) * motionCanvas.height;
+
+    // Varre apenas os pixels que estão dentro da Zona Proibida
+    for (let y = 0; y < motionCanvas.height; y += 2) {
+      for (let x = startX; x < endX; x += 2) {
+        const i = (y * motionCanvas.width + x) * 4;
+        const diffR = Math.abs(data[i] - prevFrameData[i]);
+        const diffG = Math.abs(data[i+1] - prevFrameData[i+1]);
+        const diffB = Math.abs(data[i+2] - prevFrameData[i+2]);
+        const diff = (diffR + diffG + diffB) / 3;
+
+        // Se o pixel mudou de cor consideravelmente
+        if (diff > sensibilidade) {
+          pixelsMudados++;
+        }
+      }
+    }
+
+    prevFrameData = data;
+
+    // Se mais de 3.5% dos pixels da zona mudaram de uma vez (uma mão ou braço invadindo)
+    const taxaMudanca = (pixelsMudados / (totalPixelsZona / 4)) * 100;
+    return taxaMudanca > 3.5;
   }
 
-  async function dispararBurstShot() {
-    if (isCapturingBurst || cooldown) return;
-    isCapturingBurst = true;
+  /* ================= LOOP DE VÍDEO & DESENHO ================= */
+  function renderLoop() {
+    if (video.videoWidth) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      // 1. Desenha o vídeo da câmera fluido
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const linhaPx = canvas.width * limiteXPercent;
+
+      // 2. Desenha a Zona Proibida
+      ctx.fillStyle = isRunning ? "rgba(255, 0, 0, 0.22)" : "rgba(255, 165, 0, 0.15)";
+      if (forbiddenSide === "right") {
+        ctx.fillRect(linhaPx, 0, canvas.width - linhaPx, canvas.height);
+      } else {
+        ctx.fillRect(0, 0, linhaPx, canvas.height);
+      }
+
+      // Linha tracejada
+      ctx.strokeStyle = isRunning ? "#ff3b30" : "#ff9100";
+      ctx.lineWidth = 4;
+      ctx.setLineDash([8, 6]);
+      ctx.beginPath();
+      ctx.moveTo(linhaPx, 0);
+      ctx.lineTo(linhaPx, canvas.height);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Rótulo na zona
+      ctx.font = "bold 18px sans-serif";
+      ctx.fillStyle = isRunning ? "#ff3b30" : "#ff9100";
+      const rotuloX = forbiddenSide === "right" ? linhaPx + 15 : 15;
+      ctx.fillText(isRunning ? "⚠️ ZONA MONITORADA" : "⏸️ PAUSADO (CALIBRAGEM)", rotuloX, 40);
+
+      // 3. Processamento de Movimento
+      if (isRunning && !cooldown && !isCapturing) {
+        if (checarMovimentoNaZona(limiteXPercent)) {
+          dispararCaptura();
+        }
+      }
+    }
+    requestAnimationFrame(renderLoop);
+  }
+
+  /* ================= DISPARO DE FOTOS ================= */
+  async function dispararCaptura() {
     cooldown = true;
+    isCapturing = true;
 
-    statusText.innerText = `🚨 MÃO DETECTADA! Capturando ${burstCount} fotos...`;
-    flashScreen();
+    // Flash visual
+    const flash = document.getElementById("flash-overlay");
+    flash.style.opacity = "0.7";
+    setTimeout(() => flash.style.opacity = "0", 150);
 
-    const timestampStr = new Date().toLocaleString("pt-BR");
+    statusText.innerText = `🚨 Movimento detectado! Registrando...`;
+    statusDot.className = "indicator alert";
+
+    const timestamp = new Date().toLocaleString("pt-BR");
     const fotos = [];
 
     for (let i = 0; i < burstCount; i++) {
-      fotos.push(canvasElement.toDataURL("image/jpeg", 0.85));
+      fotos.push(canvas.toDataURL("image/jpeg", 0.8));
       if (i < burstCount - 1) {
-        await new Promise((r) => setTimeout(r, burstInterval));
+        await new Promise(r => setTimeout(r, 600));
       }
     }
 
-    const evento = {
-      timestamp: timestampStr,
-      fotos: fotos
-    };
+    salvarEvento({ timestamp, fotos });
+    statusText.innerText = `✅ Salvo às ${timestamp.split(" ")[1]}`;
 
-    await salvarEvento(evento);
-    statusText.innerText = `✅ Registrado na galeria (${timestampStr.split(" ")[1]})`;
+    isCapturing = false;
 
-    isCapturingBurst = false;
-
-    // Pausa de 5s para não repetir no mesmo movimento
+    // Cooldown de 5 segundos para não inundar fotos da mesma ação
     setTimeout(() => {
       cooldown = false;
-      if (isMonitoringActive) {
-        statusText.innerText = "Monitoramento ATIVO";
+      if (isRunning) {
+        statusText.innerText = "Monitorando prateleira...";
+        statusDot.className = "indicator running";
       }
     }, 5000);
   }
 
-  /* =========================================================================
-     5. PROCESSAMENTO MEDIAPIPE & DESENHO NA TELA
-     ========================================================================= */
-  function onResults(results) {
-    if (!videoElement.videoWidth) return;
-
-    canvasElement.width = videoElement.videoWidth;
-    canvasElement.height = videoElement.videoHeight;
-
-    canvasCtx.save();
-    // Desenha imagem da câmera
-    canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-
-    const linhaXPixel = canvasElement.width * limiteXPercent;
-
-    // 1. Pinta a Zona Proibida translúcida
-    canvasCtx.fillStyle = "rgba(255, 0, 0, 0.18)";
-    if (forbiddenSide === "right") {
-      canvasCtx.fillRect(linhaXPixel, 0, canvasElement.width - linhaXPixel, canvasElement.height);
-    } else {
-      canvasCtx.fillRect(0, 0, linhaXPixel, canvasElement.height);
-    }
-
-    // 2. Linha divisória
-    canvasCtx.strokeStyle = "#ff3b30";
-    canvasCtx.lineWidth = 4;
-    canvasCtx.setLineDash([8, 6]);
-    canvasCtx.beginPath();
-    canvasCtx.moveTo(linhaXPixel, 0);
-    canvasCtx.lineTo(linhaXPixel, canvasElement.height);
-    canvasCtx.stroke();
-    canvasCtx.setLineDash([]);
-
-    // 3. Rótulo visual na zona
-    canvasCtx.font = "bold 16px sans-serif";
-    canvasCtx.fillStyle = "#ff3b30";
-    const labelX = forbiddenSide === "right" ? linhaXPixel + 12 : 12;
-    canvasCtx.fillText("ZONA PROIBIDA (PRATELEIRA)", labelX, 35);
-
-    // 4. Desenha esqueleto das mãos e valida invasão
-    if (results.multiHandLandmarks) {
-      for (const landmarks of results.multiHandLandmarks) {
-        // Desenha conexões e pontos verdes para dar feedback visual imediato
-        if (typeof drawConnectors === "function" && typeof drawLandmarks === "function") {
-          drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: "#00e676", lineWidth: 3 });
-          drawLandmarks(canvasCtx, landmarks, { color: "#ffffff", lineWidth: 1, radius: 4 });
-        }
-
-        // Se o monitoramento estiver ATIVO, checa se a mão invadiu
-        if (isMonitoringActive && !isCapturingBurst && !cooldown) {
-          // Ponto 8: ponta do indicador; Ponto 0: pulso; Ponto 12: dedo médio
-          const xIndicador = landmarks[8].x * canvasElement.width;
-          const xPulso = landmarks[0].x * canvasElement.width;
-          const xMedio = landmarks[12].x * canvasElement.width;
-
-          let invadiu = false;
-          if (forbiddenSide === "right") {
-            invadiu = (xIndicador > linhaXPixel || xPulso > linhaXPixel || xMedio > linhaXPixel);
-          } else {
-            invadiu = (xIndicador < linhaXPixel || xPulso < linhaXPixel || xMedio < linhaXPixel);
-          }
-
-          if (invadiu) {
-            dispararBurstShot();
-            break;
-          }
-        }
-      }
-    }
-    canvasCtx.restore();
-  }
-
-  const hands = new Hands({
-    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-  });
-
-  hands.setOptions({
-    maxNumHands: 2,
-    modelComplexity: 0,
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence: 0.5
-  });
-
-  hands.onResults(onResults);
-
-  // Loop de IA controlado pelo targetFPS
-  async function processVideoLoop() {
-    if (videoElement.readyState >= 2 && isMediaPipeReady) {
-      const now = performance.now();
-      const frameInterval = 1000 / targetFPS;
-
-      if (now - lastProcessTime >= frameInterval) {
-        lastProcessTime = now;
-        try {
-          await hands.send({ image: videoElement });
-        } catch (err) {}
-      }
-    }
-    requestAnimationFrame(processVideoLoop);
-  }
-
-  /* =========================================================================
-     6. INICIALIZAÇÃO DA CÂMERA
-     ========================================================================= */
-  const alertOverlay = document.getElementById("alert-overlay");
-  const alertMsg = document.getElementById("alert-msg");
-  const btnRetry = document.getElementById("btn-retry-camera");
-
-  function showAlert(msg) {
-    alertMsg.innerHTML = msg;
-    alertOverlay.style.display = "flex";
-    statusDot.className = "indicator error";
-    statusText.innerText = "Câmera indisponível";
-  }
-
-  async function iniciarCameraNativa() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      showAlert(
-        "<b>Atenção:</b> O navegador exige <b>HTTPS</b> para autorizar a câmera no celular.<br><br>" +
-        "Acesse pelo link HTTPS gerado no GitHub Pages."
-      );
-      return;
-    }
-
-    const constraintsList = [
-      { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
-      { video: { facingMode: "environment" }, audio: false },
-      { video: true, audio: false }
-    ];
-
-    let stream = null;
-    let lastError = null;
-
-    for (const constraints of constraintsList) {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-        if (stream) break;
-      } catch (err) {
-        lastError = err;
-      }
-    }
-
-    if (!stream) {
-      showAlert("Não foi possível acessar a câmera. Verifique as permissões do navegador.");
-      return;
-    }
-
-    alertOverlay.style.display = "none";
-    statusDot.className = "indicator stopped";
-    statusText.innerText = "Pronto. Clique em Iniciar";
-
-    videoElement.srcObject = stream;
-    videoElement.onloadedmetadata = async () => {
-      try {
-        await videoElement.play();
-        isMediaPipeReady = true;
-        requestAnimationFrame(processVideoLoop);
-      } catch (e) {
-        console.error("Erro ao dar play no vídeo:", e);
-      }
-    };
-  }
-
-  btnRetry.addEventListener("click", () => {
-    alertOverlay.style.display = "none";
-    iniciarCameraNativa();
-  });
-
-  initDB().then(() => iniciarCameraNativa());
-
-  /* =========================================================================
-     7. CALIBRAGEM NA TELA & MODO TELA PRETA
-     ========================================================================= */
-  canvasElement.addEventListener("click", (e) => {
-    const rect = canvasElement.getBoundingClientRect();
+  /* ================= INTERAÇÕES ================= */
+  // Calibra a linha tocando na tela
+  canvas.addEventListener("click", (e) => {
+    const rect = canvas.getBoundingClientRect();
     limiteXPercent = (e.clientX - rect.left) / rect.width;
     localStorage.setItem("limiteXPercent", limiteXPercent);
-    document.getElementById("slider-limite").value = Math.round(limiteXPercent * 100);
-    document.getElementById("val-limite").innerText = `${Math.round(limiteXPercent * 100)}%`;
     statusText.innerText = `Limite ajustado em ${Math.round(limiteXPercent * 100)}%`;
   });
 
-  const stealthOverlay = document.getElementById("stealth-overlay");
-  document.getElementById("btn-stealth").addEventListener("click", () => {
-    stealthOverlay.style.display = "flex";
-  });
-  let lastTap = 0;
-  stealthOverlay.addEventListener("click", () => {
-    const now = Date.now();
-    if (now - lastTap < 350) {
-      stealthOverlay.style.display = "none";
+  // Start / Stop
+  btnToggle.addEventListener("click", () => {
+    isRunning = !isRunning;
+    if (isRunning) {
+      btnToggle.innerText = "⏹️ Parar";
+      btnToggle.classList.add("active");
+      statusDot.className = "indicator running";
+      statusText.innerText = "Monitorando prateleira...";
+      prevFrameData = null; // reseta comparação
+    } else {
+      btnToggle.innerText = "▶️ Iniciar";
+      btnToggle.classList.remove("active");
+      statusDot.className = "indicator";
+      statusText.innerText = "Pausado para ajuste.";
     }
-    lastTap = now;
   });
 
-  /* =========================================================================
-     8. MODAL DE AJUSTES & TESTES
-     ========================================================================= */
+  // Modais e Configurações
   const modalConfig = document.getElementById("modal-config");
-  document.getElementById("btn-config").addEventListener("click", () => {
-    modalConfig.style.display = "flex";
+  const modalGallery = document.getElementById("modal-gallery");
+  document.getElementById("btn-config").addEventListener("click", () => modalConfig.style.display = "flex");
+  document.getElementById("close-config").addEventListener("click", () => modalConfig.style.display = "none");
+  document.getElementById("close-gallery").addEventListener("click", () => modalGallery.style.display = "none");
+
+  // Ajuste de Sensibilidade
+  const sliderSens = document.getElementById("slider-sens");
+  const valSens = document.getElementById("val-sens");
+  sliderSens.value = sensibilidade;
+  valSens.innerText = sensibilidade;
+  sliderSens.addEventListener("input", (e) => {
+    sensibilidade = parseInt(e.target.value);
+    localStorage.setItem("sensibilidade", sensibilidade);
+    valSens.innerText = sensibilidade;
   });
-  document.getElementById("close-config").addEventListener("click", () => {
-    modalConfig.style.display = "none";
-  });
-
-  // Configuração do Lado Proibido
-  const btnSideRight = document.getElementById("btn-side-right");
-  const btnSideLeft = document.getElementById("btn-side-left");
-
-  function setForbiddenSide(side) {
-    forbiddenSide = side;
-    localStorage.setItem("forbiddenSide", side);
-    btnSideRight.classList.toggle("active", side === "right");
-    btnSideLeft.classList.toggle("active", side === "left");
-  }
-  setForbiddenSide(forbiddenSide);
-
-  btnSideRight.addEventListener("click", () => setForbiddenSide("right"));
-  btnSideLeft.addEventListener("click", () => setForbiddenSide("left"));
 
   // Quantidade de Fotos
   const sliderCount = document.getElementById("slider-count");
@@ -864,107 +474,60 @@
     valCount.innerText = `${burstCount} fotos`;
   });
 
-  // Intervalo
-  const sliderInterval = document.getElementById("slider-interval");
-  const valInterval = document.getElementById("val-interval");
-  sliderInterval.value = burstInterval;
-  valInterval.innerText = `${burstInterval}ms`;
-  sliderInterval.addEventListener("input", (e) => {
-    burstInterval = parseInt(e.target.value);
-    localStorage.setItem("burstInterval", burstInterval);
-    valInterval.innerText = `${burstInterval}ms`;
-  });
-
-  // FPS
-  const sliderFPS = document.getElementById("slider-fps");
-  const valFPS = document.getElementById("val-fps");
-  const presetBtns = document.querySelectorAll(".preset-btn");
-
-  function setFPS(valor) {
-    targetFPS = parseInt(valor);
-    localStorage.setItem("targetFPS", targetFPS);
-    sliderFPS.value = targetFPS;
-    valFPS.innerText = `${targetFPS} FPS`;
-    presetBtns.forEach((btn) => {
-      btn.classList.toggle("active", parseInt(btn.dataset.fps) === targetFPS);
-    });
+  // Lados
+  const btnRight = document.getElementById("side-right");
+  const btnLeft = document.getElementById("side-left");
+  function updateSideUI() {
+    btnRight.style.background = forbiddenSide === "right" ? "#ff5252" : "";
+    btnLeft.style.background = forbiddenSide === "left" ? "#ff5252" : "";
   }
-  setFPS(targetFPS);
-  sliderFPS.addEventListener("input", (e) => setFPS(e.target.value));
-  presetBtns.forEach((btn) => btn.addEventListener("click", () => setFPS(btn.dataset.fps)));
+  updateSideUI();
+  btnRight.addEventListener("click", () => { forbiddenSide = "right"; localStorage.setItem("forbiddenSide", "right"); updateSideUI(); });
+  btnLeft.addEventListener("click", () => { forbiddenSide = "left"; localStorage.setItem("forbiddenSide", "left"); updateSideUI(); });
 
-  // Limite
-  const sliderLimite = document.getElementById("slider-limite");
-  const valLimite = document.getElementById("val-limite");
-  sliderLimite.value = Math.round(limiteXPercent * 100);
-  valLimite.innerText = `${Math.round(limiteXPercent * 100)}%`;
-  sliderLimite.addEventListener("input", (e) => {
-    limiteXPercent = parseInt(e.target.value) / 100;
-    localStorage.setItem("limiteXPercent", limiteXPercent);
-    valLimite.innerText = `${e.target.value}%`;
-  });
-
-  // Botão de Disparo Manual de Teste
-  document.getElementById("btn-test-capture").addEventListener("click", async () => {
-    modalConfig.style.display = "none";
-    await dispararBurstShot();
-  });
-
-  /* =========================================================================
-     9. MODAL DA GALERIA
-     ========================================================================= */
-  const modalGallery = document.getElementById("modal-gallery");
-  const galleryContainer = document.getElementById("gallery-container");
-  const lightbox = document.getElementById("lightbox");
-  const lightboxImg = document.getElementById("lightbox-img");
-
+  // Galeria
   document.getElementById("btn-gallery").addEventListener("click", async () => {
     modalGallery.style.display = "flex";
     const eventos = await obterEventos();
-    galleryContainer.innerHTML = "";
+    const container = document.getElementById("gallery-container");
+    container.innerHTML = "";
 
-    if (!eventos || eventos.length === 0) {
-      galleryContainer.innerHTML = `<div style="text-align: center; color: #888; margin-top: 40px;">Nenhum registro capturado até o momento.</div>`;
+    if (!eventos.length) {
+      container.innerHTML = `<div style="text-align: center; color: #888; margin-top: 40px;">Nenhum registro capturado.</div>`;
       return;
     }
 
-    eventos.slice().reverse().forEach((ev) => {
+    eventos.reverse().forEach((ev) => {
       const card = document.createElement("div");
       card.className = "event-card";
       card.innerHTML = `
-        <div class="event-meta">
-          <strong>🕒 ${ev.timestamp}</strong>
-          <span>${ev.fotos ? ev.fotos.length : 0} foto(s) capturada(s)</span>
-        </div>
+        <div class="event-meta">🕒 <b>${ev.timestamp}</b> (${ev.fotos.length} fotos)</div>
         <div class="thumb-grid">
-          ${(ev.fotos || []).map((src, i) => `<img src="${src}" data-index="${i}" alt="Foto ${i+1}">`).join("")}
+          ${ev.fotos.map(src => `<img src="${src}">`).join("")}
         </div>
       `;
-      card.querySelectorAll("img").forEach((img) => {
+      card.querySelectorAll("img").forEach(img => {
         img.addEventListener("click", () => {
-          lightboxImg.src = img.src;
-          lightbox.style.display = "flex";
+          document.getElementById("lightbox-img").src = img.src;
+          document.getElementById("lightbox").style.display = "flex";
         });
       });
-      galleryContainer.appendChild(card);
+      container.appendChild(card);
     });
   });
 
-  document.getElementById("close-gallery").addEventListener("click", () => {
-    modalGallery.style.display = "none";
-  });
-
-  lightbox.addEventListener("click", () => {
-    lightbox.style.display = "none";
-  });
-
-  document.getElementById("btn-clear-db").addEventListener("click", async () => {
-    if (confirm("Deseja apagar todos os registros salvos neste aparelho?")) {
-      await limparEventos();
+  document.getElementById("lightbox").addEventListener("click", () => document.getElementById("lightbox").style.display = "none");
+  document.getElementById("btn-clear").addEventListener("click", async () => {
+    if (confirm("Apagar todos os registros da galeria?")) {
+      const tx = db.transaction("eventos", "readwrite");
+      tx.objectStore("eventos").clear();
       modalGallery.style.display = "none";
-      statusText.innerText = "Galeria limpa com sucesso.";
+      statusText.innerText = "Galeria limpa.";
     }
   });
+
+  // Inicialização
+  initDB().then(initCamera);
 </script>
 
 </body>
