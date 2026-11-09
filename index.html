@@ -357,12 +357,35 @@
   const motionCtx = motionCanvas.getContext("2d", { willReadFrequently: true });
 
   /* ================= CÂMERA ================= */
-  async function initCamera() {
+    async function initCamera() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } },
+      const constraints = {
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 }
+        },
         audio: false
-      });
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      
+      // Tenta travar foco contínuo ou foco fixo se a câmera do aparelho permitir
+      try {
+        const track = stream.getVideoTracks()[0];
+        const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+        const advanced = {};
+        if (capabilities.focusMode && capabilities.focusMode.includes("continuous")) {
+          advanced.focusMode = "continuous";
+        }
+        if (capabilities.exposureMode && capabilities.exposureMode.includes("continuous")) {
+          advanced.exposureMode = "continuous";
+        }
+        if (Object.keys(advanced).length > 0) {
+          await track.applyConstraints({ advanced: [advanced] });
+        }
+      } catch(errCap) {
+        console.log("Ajuste avançado de foco não suportado no hardware, usando filtro digital por software.");
+      }
+
       video.srcObject = stream;
       video.onloadedmetadata = () => {
         video.play();
@@ -375,7 +398,7 @@
     }
   }
 
-  /* ================= DETECÇÃO DE MOVIMENTO DENTRO DA CAIXA ================= */
+  /* ================= DETECÇÃO COM COMPENSAÇÃO DE FOCO E EXPOSIÇÃO ================= */
   function checarMovimentoNaCaixa() {
     motionCtx.drawImage(video, 0, 0, motionCanvas.width, motionCanvas.height);
     const curr = motionCtx.getImageData(0, 0, motionCanvas.width, motionCanvas.height);
@@ -391,27 +414,54 @@
     const startY = Math.floor(motionCanvas.height * boxY);
     const endY = Math.min(motionCanvas.height, Math.floor(motionCanvas.height * (boxY + boxH)));
 
+    let totalAmos = 0;
+    let somaDiff = 0;
+
+    // Passo 1: Calcula o desvio global médio de luminosidade (Auto-Exposição / Foco global)
+    for (let y = startY; y < endY; y += 4) {
+      for (let x = startX; x < endX; x += 4) {
+        const i = (y * motionCanvas.width + x) * 4;
+        const briCurr = (data[i] * 299 + data[i+1] * 587 + data[i+2] * 114) / 1000;
+        const briPrev = (prevFrameData[i] * 299 + prevFrameData[i+1] * 587 + prevFrameData[i+2] * 114) / 1000;
+        somaDiff += (briCurr - briPrev);
+        totalAmos++;
+      }
+    }
+
+    const offsetGlobalLuz = totalAmos > 0 ? (somaDiff / totalAmos) : 0;
+
+    // Passo 2: Avalia apenas os pixels que variam ALÉM da oscilação global de luz/foco
     let pixelsMudados = 0;
-    const totalPixelsZona = Math.max(1, (endX - startX) * (endY - startY));
+    let pixelsTotaisZona = 0;
 
     for (let y = startY; y < endY; y += 2) {
       for (let x = startX; x < endX; x += 2) {
         const i = (y * motionCanvas.width + x) * 4;
-        const diffR = Math.abs(data[i] - prevFrameData[i]);
-        const diffG = Math.abs(data[i+1] - prevFrameData[i+1]);
-        const diffB = Math.abs(data[i+2] - prevFrameData[i+2]);
-        const diff = (diffR + diffG + diffB) / 3;
+        const briCurr = (data[i] * 299 + data[i+1] * 587 + data[i+2] * 114) / 1000;
+        const briPrev = (prevFrameData[i] * 299 + prevFrameData[i+1] * 587 + prevFrameData[i+2] * 114) / 1000;
 
-        if (diff > sensibilidade) {
+        // Subtrai a oscilação global da câmera (anula o foco automático e abertura de luz)
+        const diffReal = Math.abs((briCurr - briPrev) - offsetGlobalLuz);
+
+        if (diffReal > sensibilidade) {
           pixelsMudados++;
         }
+        pixelsTotaisZona++;
       }
     }
 
     prevFrameData = data;
 
-    const taxaMudanca = (pixelsMudados / (totalPixelsZona / 4)) * 100;
-    return taxaMudanca > 0.6;
+    const taxaMudanca = pixelsTotaisZona > 0 ? (pixelsMudados / pixelsTotaisZona) * 100 : 0;
+
+    // Filtro inteligente contra pulo de foco (Focus Hunting):
+    // Se mais de 55% de toda a caixa mudou de uma só vez, foi um pulo de lente/foco geral, não uma mão.
+    // Uma mão ou braço cobre uma fatia localizada (entre 1.2% e 45% da caixa).
+    if (taxaMudanca > 55) {
+      return false; // Descarta oscilação de lente
+    }
+
+    return taxaMudanca >= 1.2;
   }
 
   /* ================= LOOP DE VÍDEO & DESENHO ================= */
