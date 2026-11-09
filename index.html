@@ -9,20 +9,25 @@
   <title>Monitor da Lojinha - Caixa Ajustável</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
+    html, body {
       background: #000;
       color: #fff;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       overflow: hidden;
-      width: 100vw;
-      height: 100vh;
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      height: 100dvh;
       user-select: none;
       touch-action: none;
     }
     #app-container {
-      position: relative;
-      width: 100vw;
-      height: 100vh;
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      height: 100dvh;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -161,7 +166,7 @@
     #lightbox {
       position: fixed;
       top: 0; left: 0;
-      width: 100vw; height: 100vh;
+      inset: 0; width: 100%; height: 100%; height: 100dvh;
       background: rgba(0, 0, 0, 0.95);
       z-index: 200;
       display: none;
@@ -257,7 +262,7 @@
   <video id="input-video" playsinline autoplay muted></video>
   <!-- Renderizamos o canvas por cima, perfeitamente alinhado -->
   <canvas id="output-canvas"></canvas>
-  <div style="position: absolute; bottom: 16px; left: 16px; font-size: 11px; color: rgba(255, 100, 100, 0.85); pointer-events: none; font-weight: bold; background: rgba(0, 0, 0, 0.6); padding: 4px 8px; border-radius: 6px; z-index: 50;">v1.1.1</div>
+  <div id="version-badge" style="position: fixed; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); left: 16px; font-size: 12px; color: #ff6b6b; pointer-events: none; font-weight: bold; background: rgba(0, 0, 0, 0.75); border: 1px solid rgba(255, 107, 107, 0.35); padding: 4px 10px; border-radius: 8px; z-index: 90;">v1.2.1</div>
 </div>
 
 <!-- Modal Config -->
@@ -281,14 +286,19 @@
       </div>
     </div>
 
-    <!-- Quantidade de Fotos -->
+    <!-- Quantidade de Fotos e Velocidade do Disparo -->
     <div class="config-card">
-      <div class="config-title">📸 Quantidade de Fotos</div>
-      <div class="config-desc">Fotos tiradas em sequência por detecção.</div>
+      <div class="config-title">⚡ Disparo Rápido (Burst)</div>
+      <div class="config-desc">Captura os quadros na memória sem travar o processador e codifica depois.</div>
       <div class="slider-row">
         <label>Fotos:</label>
         <input type="range" id="slider-count" min="1" max="5" step="1" value="3">
         <span class="slider-val" id="val-count">3 fotos</span>
+      </div>
+      <div class="slider-row">
+        <label>Intervalo:</label>
+        <input type="range" id="slider-interval" min="100" max="600" step="20" value="180">
+        <span class="slider-val" id="val-interval">180ms</span>
       </div>
     </div>
 
@@ -382,6 +392,10 @@
 
   let sensibilidade = parseInt(localStorage.getItem("sensibilidade")) || 35;
   let burstCount = parseInt(localStorage.getItem("burstCount")) || 3;
+  let burstInterval = parseInt(localStorage.getItem("burstInterval")) || 180;
+
+  // Pool de canvases em memória para captura instantânea (< 1ms) sem travar a CPU com JPEG
+  const frameBufferPool = Array.from({ length: 5 }, () => document.createElement("canvas"));
 
   let cooldown = false;
   let isCapturing = false;
@@ -407,7 +421,12 @@
   async function initCamera() {
     try {
       const constraints = {
-        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } },
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 960 },
+          height: { ideal: 540 },
+          frameRate: { ideal: 30 }
+        },
         audio: false
       };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -542,11 +561,13 @@
   /* ================= LOOP DE VÍDEO & DESENHO ================= */
   function renderLoop() {
     if (video.videoWidth) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      // Só altera as dimensões do canvas se o tamanho do vídeo mudar (evita realocar memória 60x por segundo)
+      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+      }
 
-      // Sincroniza a proporção do canvas de movimento com o vídeo real (ex: 16:9, 4:3)
-      // Isso elimina o erro de disparo antes da linha
+      // Sincroniza a proporção do canvas de movimento com o vídeo real
       const expectedHeight = Math.floor(160 * (video.videoHeight / video.videoWidth));
       if (motionCanvas.height !== expectedHeight && expectedHeight > 0) {
         motionCanvas.height = expectedHeight;
@@ -609,26 +630,49 @@
     requestAnimationFrame(renderLoop);
   }
 
-  /* ================= DISPARO DE FOTOS ================= */
+  /* ================= DISPARO ULTRA-RÁPIDO EM MEMÓRIA RAM ================= */
+  function copiarFrameParaBuffer(bufferCanvas) {
+    const w = canvas.width;
+    const h = canvas.height;
+    if (bufferCanvas.width !== w || bufferCanvas.height !== h) {
+      bufferCanvas.width = w;
+      bufferCanvas.height = h;
+    }
+    const bCtx = bufferCanvas.getContext("2d");
+    // Copia o frame já desenhado na tela (leva ~1ms, sem compressão pesada)
+    bCtx.drawImage(canvas, 0, 0, w, h);
+  }
+
   async function dispararCaptura() {
     cooldown = true;
     isCapturing = true;
 
+    // 1. CAPTURA IMEDIATA DO FRAME 0 (no exato milissegundo da detecção, antes de mexer no DOM!)
+    copiarFrameParaBuffer(frameBufferPool[0]);
+
+    // 2. Agora sim exibe o aviso visual e o flash
     const flash = document.getElementById("flash-overlay");
     flash.style.opacity = "0.7";
-    setTimeout(() => flash.style.opacity = "0", 150);
+    setTimeout(() => flash.style.opacity = "0", 120);
 
-    statusText.innerText = `🚨 Movimento detectado! Registrando...`;
+    statusText.innerText = `🚨 Capturando rápido...`;
     statusDot.className = "indicator alert";
 
     const timestamp = new Date().toLocaleString("pt-BR");
-    const fotos = [];
 
+    // 3. Captura os demais frames na memória bruta com intervalo curto (padrão 180ms)
+    for (let i = 1; i < burstCount; i++) {
+      await new Promise(r => setTimeout(r, burstInterval));
+      copiarFrameParaBuffer(frameBufferPool[i]);
+    }
+
+    // 4. Só converte para JPEG DEPOIS que todas as fotos já foram congeladas na memória!
+    statusText.innerText = `⏳ Processando fotos...`;
+    await new Promise(r => setTimeout(r, 20)); // Deixa a tela respirar
+
+    const fotos = [];
     for (let i = 0; i < burstCount; i++) {
-      fotos.push(canvas.toDataURL("image/jpeg", 0.8));
-      if (i < burstCount - 1) {
-        await new Promise(r => setTimeout(r, 600));
-      }
+      fotos.push(frameBufferPool[i].toDataURL("image/jpeg", 0.75));
     }
 
     salvarEvento({ timestamp, fotos });
@@ -642,7 +686,7 @@
         statusText.innerText = "Monitorando prateleira...";
         statusDot.className = "indicator running";
       }
-    }, 5000);
+    }, 4000);
   }
 
   /* ================= ARRASTAR CAIXA COM PRECISÃO ================= */
@@ -796,6 +840,10 @@
   const sliderCount = document.getElementById("slider-count"); const valCount = document.getElementById("val-count");
   sliderCount.value = burstCount; valCount.innerText = `${burstCount} fotos`;
   sliderCount.addEventListener("input", (e) => { burstCount = parseInt(e.target.value); localStorage.setItem("burstCount", burstCount); valCount.innerText = `${burstCount} fotos`; });
+
+  const sliderInterval = document.getElementById("slider-interval"); const valInterval = document.getElementById("val-interval");
+  sliderInterval.value = burstInterval; valInterval.innerText = `${burstInterval}ms`;
+  sliderInterval.addEventListener("input", (e) => { burstInterval = parseInt(e.target.value); localStorage.setItem("burstInterval", burstInterval); valInterval.innerText = `${burstInterval}ms`; });
 
   /* ================= GALERIA E LIGHTBOX COM NAVEGAÇÃO ================= */
   let currentGalleryImages = [];
