@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -32,9 +32,17 @@
       justify-content: center;
       align-items: center;
     }
-    video { display: none; }
+    /* O vídeo precisa continuar "renderizado" (não usar display:none) para que
+       requestVideoFrameCallback dispare de forma confiável em todos os navegadores. */
+    #input-video {
+      position: fixed;
+      left: 0; top: 0;
+      width: 2px; height: 2px;
+      opacity: 0.01;
+      pointer-events: none;
+      z-index: -1;
+    }
     canvas {
-      /* Usando contain para garantir que as coordenadas batem 100% com o que é visto */
       width: 100%;
       height: 100%;
       object-fit: contain;
@@ -49,7 +57,7 @@
       right: 12px;
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: flex-start;
       z-index: 10;
       pointer-events: none;
       gap: 8px;
@@ -80,6 +88,8 @@
 
     .btn-group {
       display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
       gap: 6px;
       pointer-events: auto;
     }
@@ -102,6 +112,7 @@
       background: #ff5252;
       color: #fff;
     }
+    #btn-retry { background: #ff9100; color: #000; font-weight: bold; border: none; }
 
     /* Flash */
     #flash-overlay {
@@ -133,7 +144,8 @@
     }
     .modal-title { font-size: 18px; font-weight: bold; }
     .close-btn { background: none; border: none; color: #aaa; font-size: 24px; cursor: pointer; padding: 4px 8px; }
-    .modal-body { flex: 1; overflow-y: auto; padding: 20px; }
+    /* padding-bottom extra: evita que o selo de versão cubra o fim do conteúdo */
+    .modal-body { flex: 1; overflow-y: auto; padding: 20px 20px 64px; touch-action: pan-y; }
 
     .config-card {
       background: rgba(255, 255, 255, 0.05);
@@ -161,11 +173,11 @@
     .thumb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; }
     .thumb-grid img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
     .thumb-grid img:active { border-color: #00e676; }
+    .gallery-msg { text-align: center; color: #888; margin-top: 40px; }
 
     /* Lightbox Interativo */
     #lightbox {
       position: fixed;
-      top: 0; left: 0;
       inset: 0; width: 100%; height: 100%; height: 100dvh;
       background: rgba(0, 0, 0, 0.95);
       z-index: 200;
@@ -202,14 +214,6 @@
       z-index: 210;
     }
     .lightbox-nav button { pointer-events: auto; }
-    #lightbox-counter {
-      color: #fff;
-      font-size: 14px;
-      font-weight: bold;
-      background: rgba(0,0,0,0.5);
-      padding: 4px 10px;
-      border-radius: 12px;
-    }
     .btn-back {
       background: rgba(255, 255, 255, 0.15);
       border: 1px solid rgba(255, 255, 255, 0.3);
@@ -239,7 +243,52 @@
       backdrop-filter: blur(8px);
     }
     .btn-nav:active { background: rgba(255, 255, 255, 0.4); }
-    #lightbox-counter { font-size: 14px; font-weight: bold; min-width: 80px; text-align: center; }
+    #lightbox-counter {
+      color: #fff;
+      background: rgba(0,0,0,0.5);
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: bold;
+      min-width: 80px;
+      text-align: center;
+    }
+
+    /* Aviso temporário (erros e mensagens longas) */
+    #toast {
+      position: fixed;
+      top: calc(64px + env(safe-area-inset-top, 0px));
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 90vw;
+      background: rgba(150, 30, 30, 0.96);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      padding: 10px 16px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.35;
+      text-align: center;
+      z-index: 300;
+      display: none;
+      pointer-events: none;
+    }
+    #toast.show { display: block; }
+
+    /* Selo de versão: fora do container principal, fixo e acima de tudo */
+    #version-badge {
+      position: fixed;
+      bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+      left: 16px;
+      z-index: 1000;
+      font-size: 12px;
+      font-weight: bold;
+      color: #ff6b6b;
+      background: rgba(0, 0, 0, 0.75);
+      border: 1px solid rgba(255, 107, 107, 0.35);
+      padding: 4px 10px;
+      border-radius: 8px;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
@@ -250,8 +299,9 @@
       <span class="indicator" id="status-dot"></span>
       <span id="status-text">Carregando câmera...</span>
     </div>
-    
+
     <div class="btn-group">
+      <button class="btn-icon" id="btn-retry" hidden>🔄 Câmera</button>
       <button class="btn-icon" id="btn-toggle">▶️ Iniciar</button>
       <button class="btn-icon" id="btn-config">⚙️ Ajustes</button>
       <button class="btn-icon" id="btn-gallery">🖼️ Galeria</button>
@@ -260,9 +310,8 @@
 
   <div id="flash-overlay"></div>
   <video id="input-video" playsinline autoplay muted></video>
-  <!-- Renderizamos o canvas por cima, perfeitamente alinhado -->
+  <!-- Canvas apenas de visualização (com moldura e textos). As fotos NÃO saem daqui. -->
   <canvas id="output-canvas"></canvas>
-  <div id="version-badge" style="position: fixed; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); left: 16px; font-size: 12px; color: #ff6b6b; pointer-events: none; font-weight: bold; background: rgba(0, 0, 0, 0.75); border: 1px solid rgba(255, 107, 107, 0.35); padding: 4px 10px; border-radius: 8px; z-index: 90;">v1.2.1</div>
 </div>
 
 <!-- Modal Config -->
@@ -276,20 +325,20 @@
     <div class="config-card">
       <div class="config-title">🎚️ Sensibilidade ao Movimento</div>
       <div class="config-desc">
-        Aumente o valor se estiver a disparar com sombras/luzes. Baixe se não detetar a mão.<br>
-        Padrão: 35.
+        Aumente o valor se estiver disparando com sombras/luzes. Diminua se não detectar a mão.<br>
+        Padrão: <span id="sens-default">28</span>.
       </div>
       <div class="slider-row">
         <label>Sensib.:</label>
-        <input type="range" id="slider-sens" min="10" max="80" step="1" value="35">
-        <span class="slider-val" id="val-sens">35</span>
+        <input type="range" id="slider-sens" min="10" max="80" step="1" value="28">
+        <span class="slider-val" id="val-sens">28</span>
       </div>
     </div>
 
     <!-- Quantidade de Fotos e Velocidade do Disparo -->
     <div class="config-card">
       <div class="config-title">⚡ Disparo Rápido (Burst)</div>
-      <div class="config-desc">Captura os quadros na memória sem travar o processador e codifica depois.</div>
+      <div class="config-desc">A 1ª foto sai no instante da detecção; as demais usam sempre um quadro novo da câmera.</div>
       <div class="slider-row">
         <label>Fotos:</label>
         <input type="range" id="slider-count" min="1" max="5" step="1" value="3">
@@ -297,9 +346,15 @@
       </div>
       <div class="slider-row">
         <label>Intervalo:</label>
-        <input type="range" id="slider-interval" min="100" max="600" step="20" value="180">
-        <span class="slider-val" id="val-interval">180ms</span>
+        <input type="range" id="slider-interval" min="40" max="600" step="10" value="80">
+        <span class="slider-val" id="val-interval">80ms</span>
       </div>
+      <div class="slider-row">
+        <label>Pausa:</label>
+        <input type="range" id="slider-cooldown" min="500" max="5000" step="100" value="1500">
+        <span class="slider-val" id="val-cooldown">1.5s</span>
+      </div>
+      <div class="config-desc" style="margin-bottom:0">Pausa = tempo mínimo entre um evento e o próximo.</div>
     </div>
 
     <!-- Ajustes Numéricos Manuais -->
@@ -308,22 +363,22 @@
       <div class="config-desc">Arraste a caixa na tela principal ou ajuste aqui:</div>
       <div class="slider-row">
         <label>Largura:</label>
-        <input type="range" id="slider-box-w" min="10" max="95" step="1" value="50">
+        <input type="range" id="slider-box-w" min="10" max="100" step="1" value="50">
         <span class="slider-val" id="val-box-w">50%</span>
       </div>
       <div class="slider-row">
         <label>Altura:</label>
-        <input type="range" id="slider-box-h" min="10" max="95" step="1" value="60">
+        <input type="range" id="slider-box-h" min="10" max="100" step="1" value="60">
         <span class="slider-val" id="val-box-h">60%</span>
       </div>
       <div class="slider-row">
         <label>Pos. X:</label>
-        <input type="range" id="slider-box-x" min="0" max="90" step="1" value="45">
-        <span class="slider-val" id="val-box-x">45%</span>
+        <input type="range" id="slider-box-x" min="0" max="100" step="1" value="40">
+        <span class="slider-val" id="val-box-x">40%</span>
       </div>
       <div class="slider-row">
         <label>Pos. Y:</label>
-        <input type="range" id="slider-box-y" min="0" max="90" step="1" value="20">
+        <input type="range" id="slider-box-y" min="0" max="100" step="1" value="20">
         <span class="slider-val" id="val-box-y">20%</span>
       </div>
     </div>
@@ -340,7 +395,7 @@
     </div>
   </div>
   <div class="modal-body" id="gallery-container">
-    <div style="text-align: center; color: #888; margin-top: 40px;">Nenhum registro ainda.</div>
+    <div class="gallery-msg">Nenhum registro ainda.</div>
   </div>
 </div>
 
@@ -357,232 +412,631 @@
   </div>
 </div>
 
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="version-badge">v1.3.0</div>
+
 <script>
-  /* ================= BANCO LOCAL (IndexedDB) ================= */
-  let db;
-  function initDB() {
-    return new Promise((res) => {
-      const req = indexedDB.open("LojinhaBoxDB", 1);
-      req.onupgradeneeded = (e) => e.target.result.createObjectStore("eventos", { keyPath: "id", autoIncrement: true });
-      req.onsuccess = (e) => { db = e.target.result; res(); };
-      req.onerror = () => res();
-    });
+  /* ================= CONFIGURAÇÃO CENTRAL ================= */
+  const APP_VERSION = "1.3.0";
+  const CONFIG_VERSAO = 3; // incrementa quando os padrões mudam (usado na migração das preferências)
+
+  const CONFIG = {
+    db: { nome: "LojinhaBoxDB", versao: 1, store: "eventos" },
+    deteccao: {
+      larguraAnalise: 240,       // altura é calculada pela proporção real do vídeo (240x135 em 16:9, 240x180 em 4:3)
+      grade: 5,                  // a caixa é dividida em grade x grade células
+      razaoMinima: 0.010,        // fração mínima de pixels alterados dentro da caixa (1,0%)
+      razaoMaxima: 0.85,         // acima disso considera pulo de câmera / flash de luz e ignora
+      razaoCelulaMinima: 0.08,   // fração mínima de alteração para uma célula ser considerada "ativa"
+      celulasMinimas: 2,         // nº mínimo de células ativas (exige movimento distribuído, não pontual)
+      offsetLuzMax: 40           // correção máxima de variação global de luz (níveis de 0-255)
+    },
+    padroes: {
+      sensibilidade: 28,
+      burstCount: 3,
+      burstInterval: 80,
+      cooldownMs: 1500,
+      caixa: { x: 0.40, y: 0.20, w: 0.50, h: 0.60 }
+    },
+    limites: {
+      sensibilidade: [10, 80],
+      burstCount: [1, 5],
+      burstInterval: [40, 600],
+      cooldownMs: [500, 5000],
+      caixaMin: 0.10             // tamanho mínimo da caixa (fração do quadro)
+    },
+    captura: { qualidadeJpeg: 0.75, timeoutFrameMs: 1000 },
+    camera: { timeoutProntaMs: 8000, watchdogMs: 2000 },
+    interacao: { tolerancia: 0.08 }
+  };
+  const DEBUG = /[?&#]debug/.test(location.href); // adicione ?debug=1 na URL para ver os números da detecção
+
+  /* ================= UTILITÁRIOS ================= */
+  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const $ = (id) => document.getElementById(id);
+
+  const prefs = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
+  };
+  // Lê número salvo respeitando o valor 0 (o antigo "|| padrão" trocava 0 pelo padrão)
+  function lerNumero(chave, padrao, min, max, inteiro) {
+    const raw = prefs.get(chave);
+    if (raw === null) return padrao;
+    const n = inteiro ? parseInt(raw, 10) : parseFloat(raw);
+    return Number.isFinite(n) ? clamp(n, min, max) : padrao;
   }
-  function salvarEvento(evento) {
-    if (!db) return;
-    const tx = db.transaction("eventos", "readwrite");
-    tx.objectStore("eventos").add(evento);
+
+  // Migração: quem ainda usa os padrões antigos (sensib. 35 / intervalo 180ms) recebe os novos.
+  // Valores personalizados pelo usuário são preservados.
+  (function migrarPreferencias() {
+    const v = parseInt(prefs.get("configVersao") || "0", 10);
+    if (v < CONFIG_VERSAO) {
+      if (prefs.get("sensibilidade") === "35") prefs.set("sensibilidade", CONFIG.padroes.sensibilidade);
+      if (prefs.get("burstInterval") === "180") prefs.set("burstInterval", CONFIG.padroes.burstInterval);
+      prefs.set("configVersao", CONFIG_VERSAO);
+    }
+  })();
+
+  /* ================= ESTADO ================= */
+  const L = CONFIG.limites, P = CONFIG.padroes;
+  const estado = {
+    sensibilidade: lerNumero("sensibilidade", P.sensibilidade, ...L.sensibilidade, true),
+    burstCount: lerNumero("burstCount", P.burstCount, ...L.burstCount, true),
+    burstInterval: lerNumero("burstInterval", P.burstInterval, ...L.burstInterval, true),
+    cooldownMs: lerNumero("cooldownMs", P.cooldownMs, ...L.cooldownMs, true)
+  };
+
+  /* ================= LIMITES DA CAIXA (validação única) ================= */
+  function normalizarCaixa(c) {
+    const min = L.caixaMin;
+    const num = (v, d) => Number.isFinite(v) ? v : d;
+    const w = clamp(num(c.w, P.caixa.w), min, 1);
+    const h = clamp(num(c.h, P.caixa.h), min, 1);
+    return {
+      w, h,
+      x: clamp(num(c.x, P.caixa.x), 0, 1 - w),
+      y: clamp(num(c.y, P.caixa.y), 0, 1 - h)
+    };
   }
-  function obterEventos() {
-    return new Promise((res) => {
-      if (!db) return res([]);
-      const req = db.transaction("eventos", "readonly").objectStore("eventos").getAll();
-      req.onsuccess = () => res(req.result || []);
-      req.onerror = () => res([]);
-    });
+  const caixa = normalizarCaixa({
+    x: lerNumero("boxX", P.caixa.x, 0, 1),
+    y: lerNumero("boxY", P.caixa.y, 0, 1),
+    w: lerNumero("boxW", P.caixa.w, 0, 1),
+    h: lerNumero("boxH", P.caixa.h, 0, 1)
+  });
+  // Único ponto de alteração da caixa: sliders e arraste passam por aqui
+  function definirCaixa(parcial) {
+    Object.assign(caixa, normalizarCaixa({ ...caixa, ...parcial }));
+    prefs.set("boxX", caixa.x); prefs.set("boxY", caixa.y);
+    prefs.set("boxW", caixa.w); prefs.set("boxH", caixa.h);
+    sincronizarSliders();
   }
 
-  /* ================= VARIÁVEIS E ESTADO ================= */
-  let isRunning = false;
-
-  let boxX = parseFloat(localStorage.getItem("boxX")) || 0.40;
-  let boxY = parseFloat(localStorage.getItem("boxY")) || 0.20;
-  let boxW = parseFloat(localStorage.getItem("boxW")) || 0.50;
-  let boxH = parseFloat(localStorage.getItem("boxH")) || 0.60;
-
-  let sensibilidade = parseInt(localStorage.getItem("sensibilidade")) || 35;
-  let burstCount = parseInt(localStorage.getItem("burstCount")) || 3;
-  let burstInterval = parseInt(localStorage.getItem("burstInterval")) || 180;
-
-  // Pool de canvases em memória para captura instantânea (< 1ms) sem travar a CPU com JPEG
-  const frameBufferPool = Array.from({ length: 5 }, () => document.createElement("canvas"));
-
-  let cooldown = false;
-  let isCapturing = false;
-  let prevFrameData = null;
-
-  let dragMode = "none";
-  let dragStartCoords = { x: 0, y: 0 };
-  let initialBox = { x: 0, y: 0, w: 0, h: 0 };
-
-  const video = document.getElementById("input-video");
-  const canvas = document.getElementById("output-canvas");
+  /* ================= ELEMENTOS ================= */
+  const video = $("input-video");
+  const canvas = $("output-canvas");
   const ctx = canvas.getContext("2d");
-  const statusText = document.getElementById("status-text");
-  const statusDot = document.getElementById("status-dot");
-  const btnToggle = document.getElementById("btn-toggle");
+  const statusText = $("status-text");
+  const statusDot = $("status-dot");
+  const btnToggle = $("btn-toggle");
+  const btnRetry = $("btn-retry");
+  const toastEl = $("toast");
 
   const motionCanvas = document.createElement("canvas");
-  motionCanvas.width = 160;
-  motionCanvas.height = 120;
   const motionCtx = motionCanvas.getContext("2d", { willReadFrequently: true });
 
-  /* ================= CÂMERA ================= */
-  async function initCamera() {
-    try {
-      const constraints = {
-        video: {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 960 },
-          height: { ideal: 540 },
-          frameRate: { ideal: 30 }
-        },
-        audio: false
+  // Canvases exclusivos de captura: recebem o frame direto do <video> (sem moldura/textos)
+  const capturaCanvases = Array.from({ length: 5 }, () => document.createElement("canvas"));
+  const capturaCtxs = capturaCanvases.map(c => c.getContext("2d"));
+
+  let isRunning = false;
+  let capturando = false;
+  let cooldownAte = 0;
+  const emCooldown = () => performance.now() < cooldownAte;
+
+  function setStatus(texto, classe) {
+    statusText.textContent = texto;
+    statusText.parentElement.title = texto;
+    statusDot.className = "indicator" + (classe ? " " + classe : "");
+  }
+  let toastTimer = null;
+  function toast(msg, ms = 4500) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove("show"), ms);
+  }
+
+  /* ================= BANCO LOCAL (IndexedDB) ================= */
+  let db = null;
+  function initDB() {
+    return new Promise((resolve) => {
+      if (!window.indexedDB) { resolve(false); return; }
+      let req;
+      try { req = indexedDB.open(CONFIG.db.nome, CONFIG.db.versao); }
+      catch (e) { resolve(false); return; }
+      // Sem mudança de estrutura: registros antigos (Base64) continuam intactos.
+      // Novos registros guardam Blobs no mesmo campo "fotos"; a leitura aceita os dois formatos.
+      req.onupgradeneeded = (e) => {
+        const d = e.target.result;
+        if (!d.objectStoreNames.contains(CONFIG.db.store)) {
+          d.createObjectStore(CONFIG.db.store, { keyPath: "id", autoIncrement: true });
+        }
       };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      
+      req.onsuccess = (e) => {
+        db = e.target.result;
+        db.onversionchange = () => { db.close(); db = null; };
+        db.onclose = () => { db = null; };
+        resolve(true);
+      };
+      req.onerror = () => resolve(false);
+    });
+  }
+  // Executa uma operação e só resolve quando a transação for confirmada (oncomplete)
+  function executarTx(modo, operacao) {
+    return new Promise((resolve, reject) => {
+      if (!db) { reject(new Error("Banco de dados indisponível")); return; }
+      let resultado;
+      let tx;
       try {
-        const track = stream.getVideoTracks()[0];
+        tx = db.transaction(CONFIG.db.store, modo);
+        const req = operacao(tx.objectStore(CONFIG.db.store));
+        if (req) req.onsuccess = () => { resultado = req.result; };
+      } catch (e) { reject(e); return; }
+      tx.oncomplete = () => resolve(resultado);
+      tx.onerror = () => reject(tx.error || new Error("Erro na transação"));
+      tx.onabort = () => reject(tx.error || new Error("Transação cancelada"));
+    });
+  }
+  async function salvarEvento(evento) {
+    if (!db) await initDB();
+    await executarTx("readwrite", (s) => s.add(evento));
+  }
+  async function obterEventos() {
+    if (!db) await initDB();
+    return (await executarTx("readonly", (s) => s.getAll())) || [];
+  }
+  async function limparEventos() {
+    await executarTx("readwrite", (s) => s.clear());
+  }
+  function mensagemErroDB(e) {
+    if (e && e.name === "QuotaExceededError") return "Armazenamento cheio. Apague registros antigos na galeria.";
+    return "Não foi possível acessar o armazenamento do navegador.";
+  }
+
+  /* ================= CÂMERA ================= */
+  let stream = null;
+  let cameraPronta = false;
+  let cameraToken = 0;
+
+  function pararStream() {
+    if (stream) { stream.getTracks().forEach(t => { t.onended = null; t.stop(); }); stream = null; }
+    video.srcObject = null;
+  }
+
+  function aguardarVideoPronto() {
+    return new Promise((resolve, reject) => {
+      const eventos = ["loadeddata", "playing", "resize"];
+      const limpar = () => { clearTimeout(timer); eventos.forEach(ev => video.removeEventListener(ev, checar)); };
+      const checar = () => { if (video.videoWidth > 0 && video.readyState >= 2) { limpar(); resolve(); } };
+      const timer = setTimeout(() => {
+        limpar();
+        reject(Object.assign(new Error("O vídeo não iniciou"), { name: "VideoTimeout" }));
+      }, CONFIG.camera.timeoutProntaMs);
+      eventos.forEach(ev => video.addEventListener(ev, checar));
+      const p = video.play();
+      if (p && p.catch) p.catch((e) => { limpar(); reject(e); });
+      checar();
+    });
+  }
+
+  function descreverErroCamera(e) {
+    const n = e && e.name;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      return { curto: "Câmera indisponível", longo: "O navegador não liberou a câmera. Abra a página por HTTPS." };
+    }
+    if (n === "NotAllowedError" || n === "SecurityError" || n === "PermissionDeniedError") {
+      return { curto: "Permissão negada", longo: "Permissão da câmera negada. Libere o acesso nas configurações do navegador e toque em 🔄 Câmera." };
+    }
+    if (n === "NotFoundError" || n === "DevicesNotFoundError" || n === "OverconstrainedError") {
+      return { curto: "Nenhuma câmera", longo: "Nenhuma câmera encontrada neste dispositivo." };
+    }
+    if (n === "NotReadableError" || n === "TrackStartError" || n === "AbortError") {
+      return { curto: "Câmera em uso", longo: "Não foi possível abrir a câmera. Ela pode estar em uso por outro aplicativo." };
+    }
+    if (n === "VideoTimeout") {
+      return { curto: "Câmera sem imagem", longo: "A câmera abriu, mas não enviou imagem. Toque em 🔄 Câmera para tentar de novo." };
+    }
+    return { curto: "Erro na câmera", longo: "Falha ao iniciar a câmera. Toque em 🔄 Câmera para tentar de novo." };
+  }
+
+  function falhaDeCamera(e, token) {
+    if (token !== cameraToken) return;
+    cameraPronta = false;
+    pararMonitoramento();
+    pararStream();
+    const d = descreverErroCamera(e);
+    setStatus(d.curto, "alert");
+    toast(d.longo, 7000);
+    btnRetry.hidden = false;
+    console.warn("Câmera:", e);
+  }
+
+  const gUM = (video) => navigator.mediaDevices.getUserMedia({ video, audio: false });
+
+  async function iniciarCamera() {
+    const token = ++cameraToken;
+    pararMonitoramento();
+    pararStream();
+    cameraPronta = false;
+    btnRetry.hidden = true;
+    setStatus("Iniciando câmera...", "");
+
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("sem mediaDevices");
+      let s;
+      try {
+        s = await gUM({
+          facingMode: { ideal: "environment" },
+          width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 30 }
+        });
+      } catch (e) {
+        // Restrições não atendidas: tenta de novo sem exigências
+        if (e && e.name === "OverconstrainedError") s = await gUM(true);
+        else throw e;
+      }
+      if (token !== cameraToken) { s.getTracks().forEach(t => t.stop()); return; }
+      stream = s;
+
+      const track = s.getVideoTracks()[0];
+      try {
         const cap = track.getCapabilities ? track.getCapabilities() : {};
         const adv = {};
         if (cap.focusMode && cap.focusMode.includes("continuous")) adv.focusMode = "continuous";
         if (cap.exposureMode && cap.exposureMode.includes("continuous")) adv.exposureMode = "continuous";
         if (Object.keys(adv).length > 0) await track.applyConstraints({ advanced: [adv] });
-      } catch(e) {}
+      } catch (e) {}
 
-      video.srcObject = stream;
-      video.onloadedmetadata = () => {
-        video.play();
-        statusText.innerText = "Pronto. Arraste as bordas/bolinhas para ajustar.";
-        requestAnimationFrame(renderLoop);
+      // Câmera desconectada / faixa de vídeo encerrada
+      track.onended = () => {
+        if (token !== cameraToken) return;
+        falhaDeCamera(Object.assign(new Error("track ended"), { name: "TrackEnded" }), token);
+        setStatus("Câmera desconectada", "alert");
+        toast("A câmera foi desconectada. Reconecte e toque em 🔄 Câmera.", 7000);
       };
+      track.onmute = () => { if (token === cameraToken) setStatus("Câmera sem imagem...", "alert"); };
+      track.onunmute = () => {
+        if (token !== cameraToken) return;
+        resetarReferencia();
+        setStatus(isRunning ? "Monitorando prateleira..." : "Pronto.", isRunning ? "running" : "");
+      };
+
+      video.srcObject = s;
+      await aguardarVideoPronto();
+      if (token !== cameraToken) return;
+
+      cameraPronta = true;
+      resetarReferencia();
+      setStatus("Pronto. Arraste as bordas/bolinhas para ajustar.", "");
     } catch (e) {
-      statusText.innerText = "Erro ao acessar câmera (Verifique HTTPS)";
-      statusDot.className = "indicator alert";
+      falhaDeCamera(e, token);
     }
   }
 
-  /* ================= DETECÇÃO DE MOVIMENTO (CORRIGIDA PARA SOMBRAS) ================= */
-  function checarMovimentoNaCaixa() {
-    motionCtx.drawImage(video, 0, 0, motionCanvas.width, motionCanvas.height);
-    const curr = motionCtx.getImageData(0, 0, motionCanvas.width, motionCanvas.height);
-    const data = curr.data;
+  /* ================= DETECÇÃO DE MOVIMENTO ================= */
+  let prevLuma = null, currLuma = null;
+  const histDiff = new Uint32Array(511);
+  let celAlteradas = new Uint16Array(CONFIG.deteccao.grade ** 2);
+  let celTotais = new Uint16Array(CONFIG.deteccao.grade ** 2);
+  let ultimaAnalise = { razao: 0, celulas: 0, offset: 0 };
 
-    if (!prevFrameData) {
-      prevFrameData = data;
-      return false;
+  function resetarReferencia() { prevLuma = null; }
+
+  // Compara o quadro atual com o anterior SEMPRE atualizando a referência,
+  // independente de cooldown/captura em andamento (evita "perder" o movimento entre verificações).
+  function analisarFrame() {
+    const vw = video.videoWidth, vh = video.videoHeight;
+    if (!vw || !vh || video.readyState < 2) return null;
+
+    const D = CONFIG.deteccao;
+    const mw = D.larguraAnalise;
+    const mh = Math.max(1, Math.round(mw * vh / vw));
+    if (motionCanvas.width !== mw || motionCanvas.height !== mh) {
+      motionCanvas.width = mw; motionCanvas.height = mh;
+      prevLuma = null; currLuma = null;
     }
+    motionCtx.drawImage(video, 0, 0, mw, mh);
+    const data = motionCtx.getImageData(0, 0, mw, mh).data;
 
-    const startX = Math.floor(motionCanvas.width * boxX);
-    const endX = Math.min(motionCanvas.width, Math.floor(motionCanvas.width * (boxX + boxW)));
-    const startY = Math.floor(motionCanvas.height * boxY);
-    const endY = Math.min(motionCanvas.height, Math.floor(motionCanvas.height * (boxY + boxH)));
+    const n = mw * mh;
+    if (!currLuma || currLuma.length !== n) currLuma = new Uint8Array(n);
+    for (let i = 0, p = 0; i < n; i++, p += 4) {
+      currLuma[i] = (data[p] * 77 + data[p + 1] * 150 + data[p + 2] * 29) >> 8;
+    }
+    const novo = currLuma, antigo = prevLuma;
+    prevLuma = novo; currLuma = antigo; // troca de buffers (sem alocar memória a cada quadro)
+    if (!antigo) return null;
 
-    let pixelsMudados = 0;
-    const totalPixelsZona = Math.max(1, (endX - startX) * (endY - startY));
+    const sx = Math.floor(mw * caixa.x), ex = Math.min(mw, Math.ceil(mw * (caixa.x + caixa.w)));
+    const sy = Math.floor(mh * caixa.y), ey = Math.min(mh, Math.ceil(mh * (caixa.y + caixa.h)));
+    const bw = ex - sx, bh = ey - sy;
+    if (bw < 2 || bh < 2) return null;
 
-    // Passo 1: Calcula o desvio global médio (foco caçando ou luz geral mudando)
-    let somaDiff = 0;
-    let totalAmos = 0;
-    for (let y = startY; y < endY; y += 4) {
-      for (let x = startX; x < endX; x += 4) {
-        const i = (y * motionCanvas.width + x) * 4;
-        const bC = (data[i] * 299 + data[i+1] * 587 + data[i+2] * 114) / 1000;
-        const bP = (prevFrameData[i] * 299 + prevFrameData[i+1] * 587 + prevFrameData[i+2] * 114) / 1000;
-        somaDiff += (bC - bP);
-        totalAmos++;
+    // 1) Variação global de luz = MEDIANA das diferenças (robusta: uma mão não desloca a mediana
+    //    enquanto cobrir menos da metade da caixa, ao contrário da média usada antes)
+    histDiff.fill(0);
+    let amostras = 0;
+    for (let y = sy; y < ey; y += 2) {
+      const row = y * mw;
+      for (let x = sx; x < ex; x += 2) { histDiff[novo[row + x] - antigo[row + x] + 255]++; amostras++; }
+    }
+    let acum = 0, mediana = 0;
+    const metade = amostras >> 1;
+    for (let k = 0; k < 511; k++) { acum += histDiff[k]; if (acum > metade) { mediana = k - 255; break; } }
+    const offset = clamp(mediana, -D.offsetLuzMax, D.offsetLuzMax);
+
+    // 2) Conta pixels alterados no total e por célula da grade
+    const G = D.grade;
+    celAlteradas.fill(0); celTotais.fill(0);
+    const sens = estado.sensibilidade;
+    let mudados = 0;
+    for (let y = sy; y < ey; y++) {
+      const row = y * mw;
+      const gy = Math.min(G - 1, ((y - sy) * G / bh) | 0) * G;
+      for (let x = sx; x < ex; x++) {
+        const idx = gy + Math.min(G - 1, ((x - sx) * G / bw) | 0);
+        celTotais[idx]++;
+        const d = novo[row + x] - antigo[row + x] - offset;
+        if (d > sens || d < -sens) { mudados++; celAlteradas[idx]++; }
       }
     }
-    const offsetGlobalLuz = totalAmos > 0 ? (somaDiff / totalAmos) : 0;
 
-    // Passo 2: Verifica quebra brusca de contraste (ignora sombras suaves)
-    for (let y = startY; y < endY; y += 2) {
-      for (let x = startX; x < endX; x += 2) {
-        const i = (y * motionCanvas.width + x) * 4;
-        const bC = (data[i] * 299 + data[i+1] * 587 + data[i+2] * 114) / 1000;
-        const bP = (prevFrameData[i] * 299 + prevFrameData[i+1] * 587 + prevFrameData[i+2] * 114) / 1000;
-
-        const diffReal = Math.abs((bC - bP) - offsetGlobalLuz);
-
-        // Sensibilidade aumentada e uso de diffReal evita disparos por sombra da pessoa se aproximando
-        if (diffReal > sensibilidade) {
-          pixelsMudados++;
-        }
-      }
+    const razao = mudados / (bw * bh);
+    let celulas = 0;
+    for (let k = 0; k < G * G; k++) {
+      if (celTotais[k] > 0 && celAlteradas[k] / celTotais[k] >= D.razaoCelulaMinima) celulas++;
     }
-
-    prevFrameData = data;
-
-    // Ajustado para requerer uma massa sólida cruzando a caixa (1.5%)
-    const taxaMudanca = (pixelsMudados / (totalPixelsZona / 4)) * 100;
-    
-    // Ignora se a caixa inteira mudou de repente (pulo de câmera)
-    if (taxaMudanca > 60) return false; 
-
-    return taxaMudanca >= 1.5;
-  }
-
-  /* ================= MAPA DE COORDENADAS PARA OBJECT-FIT: CONTAIN ================= */
-  // Como o canvas usa object-fit: contain, as coordenadas do rato precisam de ser mapeadas
-  // para a área real onde o vídeo está sendo desenhado.
-  function getRenderedRect() {
-    const cw = canvas.clientWidth;
-    const ch = canvas.clientHeight;
-    const vw = canvas.width || 1280;
-    const vh = canvas.height || 720;
-    
-    const canvasRatio = cw / ch;
-    const videoRatio = vw / vh;
-
-    let renderW = cw;
-    let renderH = ch;
-    let offsetX = 0;
-    let offsetY = 0;
-
-    if (canvasRatio > videoRatio) {
-      // Letterbox lateral
-      renderW = ch * videoRatio;
-      offsetX = (cw - renderW) / 2;
-    } else {
-      // Letterbox topo/fundo
-      renderH = cw / videoRatio;
-      offsetY = (ch - renderH) / 2;
-    }
-    return { x: offsetX, y: offsetY, w: renderW, h: renderH };
-  }
-
-  function getNormCoords(e) {
-    const rect = canvas.getBoundingClientRect();
-    const cx = e.touches ? e.touches[0].clientX : e.clientX;
-    const cy = e.touches ? e.touches[0].clientY : e.clientY;
-    
-    const render = getRenderedRect();
-    
-    // Calcula posição relativa à imagem visível (ignorando as faixas pretas)
-    const px = cx - rect.left - render.x;
-    const py = cy - rect.top - render.y;
+    ultimaAnalise = { razao, celulas, offset };
 
     return {
-      normX: Math.max(0, Math.min(1, px / render.w)),
-      normY: Math.max(0, Math.min(1, py / render.h))
+      movimento: razao >= D.razaoMinima && razao <= D.razaoMaxima && celulas >= D.celulasMinimas
     };
   }
 
-  /* ================= LOOP DE VÍDEO & DESENHO ================= */
+  /* ================= CICLO DE DETECÇÃO (acompanha os frames reais da câmera) ================= */
+  const temRVFC = typeof HTMLVideoElement !== "undefined" && "requestVideoFrameCallback" in HTMLVideoElement.prototype;
+  let usarRVFC = temRVFC;
+  let deteccaoToken = 0;
+  let deteccaoHandle = null;
+  let deteccaoModo = null;
+  let ultimoTempoVideo = -1;
+  let ultimoProcessamento = 0;
+
+  function cancelarHandle(handle, modo) {
+    if (handle === null) return;
+    if (modo === "rvfc" && video.cancelVideoFrameCallback) video.cancelVideoFrameCallback(handle);
+    else if (modo === "raf") cancelAnimationFrame(handle);
+  }
+  function pararDeteccao() {
+    deteccaoToken++;                      // invalida qualquer ciclo anterior (nunca há dois ao mesmo tempo)
+    cancelarHandle(deteccaoHandle, deteccaoModo);
+    deteccaoHandle = null;
+  }
+  function iniciarDeteccao() {
+    pararDeteccao();
+    const token = deteccaoToken;
+    ultimoTempoVideo = -1;
+    ultimoProcessamento = performance.now();
+    agendarDeteccao(token);
+  }
+  function agendarDeteccao(token) {
+    if (token !== deteccaoToken) return;
+    if (usarRVFC) {
+      deteccaoModo = "rvfc";
+      deteccaoHandle = video.requestVideoFrameCallback(() => { deteccaoHandle = null; processarFrame(token); });
+    } else {
+      // Alternativa: rAF, mas só processa quando o vídeo realmente trouxe um quadro novo
+      deteccaoModo = "raf";
+      deteccaoHandle = requestAnimationFrame(() => {
+        deteccaoHandle = null;
+        if (token !== deteccaoToken) return;
+        if (video.currentTime !== ultimoTempoVideo) {
+          ultimoTempoVideo = video.currentTime;
+          processarFrame(token);
+        } else {
+          agendarDeteccao(token);
+        }
+      });
+    }
+  }
+  function processarFrame(token) {
+    if (token !== deteccaoToken || !isRunning) return;
+    ultimoProcessamento = performance.now();
+    try {
+      const r = analisarFrame();
+      if (r && r.movimento && !capturando && !emCooldown()) dispararCaptura();
+    } catch (e) { console.error("Erro na detecção:", e); }
+    agendarDeteccao(token);
+  }
+  // Se o navegador anunciar rVFC mas não disparar callbacks, volta para rAF automaticamente
+  setInterval(() => {
+    if (!isRunning || !cameraPronta || document.hidden || !usarRVFC) return;
+    if (performance.now() - ultimoProcessamento > CONFIG.camera.watchdogMs) {
+      console.warn("rVFC sem resposta; usando requestAnimationFrame.");
+      usarRVFC = false;
+      iniciarDeteccao();
+    }
+  }, 1000);
+
+  // Espera o PRÓXIMO quadro novo do vídeo (nunca devolve o mesmo quadro duas vezes)
+  function esperarFrameNovo() {
+    return new Promise((resolve) => {
+      let feito = false, handle = null;
+      const modo = usarRVFC ? "rvfc" : "raf";
+      const fim = (ok) => {
+        if (feito) return;
+        feito = true; clearTimeout(timer);
+        cancelarHandle(handle, modo);
+        resolve(ok);
+      };
+      const timer = setTimeout(() => fim(false), CONFIG.captura.timeoutFrameMs);
+      if (modo === "rvfc") {
+        handle = video.requestVideoFrameCallback(() => { handle = null; fim(true); });
+      } else {
+        const tempo = video.currentTime;
+        const tick = () => {
+          if (feito) return;
+          if (video.currentTime !== tempo) fim(true);
+          else handle = requestAnimationFrame(tick);
+        };
+        handle = requestAnimationFrame(tick);
+      }
+    });
+  }
+
+  /* ================= CAPTURA ================= */
+  // Copia o quadro direto do <video>: sem moldura, textos ou indicadores da interface
+  function capturarFrame(i) {
+    const w = video.videoWidth, h = video.videoHeight;
+    const c = capturaCanvases[i];
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+    capturaCtxs[i].drawImage(video, 0, 0, w, h);
+  }
+  function canvasParaBlob(c) {
+    return new Promise((resolve, reject) => {
+      c.toBlob((b) => b ? resolve(b) : reject(new Error("Falha ao gerar imagem")),
+        "image/jpeg", CONFIG.captura.qualidadeJpeg);
+    });
+  }
+
+  let timerStatus = null;
+  function restaurarStatusMonitorando() {
+    clearTimeout(timerStatus);
+    const resta = cooldownAte - performance.now();
+    timerStatus = setTimeout(() => {
+      if (isRunning && !capturando && cameraPronta) setStatus("Monitorando prateleira...", "running");
+    }, Math.max(0, resta) + 50);
+  }
+
+  async function dispararCaptura() {
+    capturando = true;
+    const n = estado.burstCount, intervalo = estado.burstInterval;
+    const timestamp = new Date().toLocaleString("pt-BR");
+    const t0 = performance.now();
+    let capturadas = 0;
+    try {
+      // Foto 1: o quadro exato que disparou a detecção (antes de qualquer mudança na tela)
+      capturarFrame(0); capturadas = 1;
+
+      const flash = $("flash-overlay");
+      flash.style.opacity = "0.7";
+      setTimeout(() => flash.style.opacity = "0", 120);
+      setStatus("🚨 Capturando...", "alert");
+
+      // Demais fotos: respeitam o intervalo e sempre usam um quadro novo
+      for (let i = 1; i < n; i++) {
+        const espera = t0 + i * intervalo - performance.now();
+        if (espera > 0) await sleep(espera);
+        if (!(await esperarFrameNovo())) break;
+        capturarFrame(i); capturadas++;
+      }
+      cooldownAte = performance.now() + estado.cooldownMs;
+
+      setStatus("⏳ Processando fotos...", "alert");
+      const fotos = await Promise.all(
+        Array.from({ length: capturadas }, (_, i) => canvasParaBlob(capturaCanvases[i]))
+      );
+      await salvarEvento({ timestamp, criadoEm: Date.now(), formato: "blob", fotos });
+      setStatus(`✅ Salvo às ${timestamp.split(" ")[1]}`, "running");
+    } catch (e) {
+      console.error("Falha ao salvar captura:", e);
+      cooldownAte = Math.max(cooldownAte, performance.now() + estado.cooldownMs);
+      setStatus("❌ Não foi possível salvar", "alert");
+      toast(mensagemErroDB(e) + " A captura deste evento foi perdida.", 6000);
+    } finally {
+      capturando = false;
+      restaurarStatusMonitorando();
+    }
+  }
+
+  /* ================= WAKE LOCK (mantém a tela ligada enquanto monitora) ================= */
+  let wakeLock = null;
+  async function pedirWakeLock() {
+    try {
+      if (isRunning && "wakeLock" in navigator && !wakeLock) {
+        wakeLock = await navigator.wakeLock.request("screen");
+        wakeLock.addEventListener("release", () => { wakeLock = null; });
+      }
+    } catch (e) { wakeLock = null; }
+  }
+  function soltarWakeLock() {
+    try { if (wakeLock) wakeLock.release(); } catch (e) {}
+    wakeLock = null;
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) { resetarReferencia(); pedirWakeLock(); }
+  });
+
+  /* ================= START / STOP ================= */
+  function iniciarMonitoramento() {
+    if (!cameraPronta) {
+      toast("A câmera ainda não está pronta. Toque em 🔄 Câmera se o problema persistir.");
+      return;
+    }
+    isRunning = true;
+    btnToggle.textContent = "⏹️ Parar";
+    btnToggle.classList.add("active");
+    setStatus("Monitorando prateleira...", "running");
+    resetarReferencia();
+    cooldownAte = 0;
+    iniciarDeteccao();
+    pedirWakeLock();
+  }
+  function pararMonitoramento() {
+    const estavaRodando = isRunning;
+    isRunning = false;
+    pararDeteccao();
+    soltarWakeLock();
+    btnToggle.textContent = "▶️ Iniciar";
+    btnToggle.classList.remove("active");
+    if (estavaRodando && cameraPronta) setStatus("Pausado. Arraste as bordas p/ regular.", "");
+  }
+  btnToggle.addEventListener("click", () => isRunning ? pararMonitoramento() : iniciarMonitoramento());
+  btnRetry.addEventListener("click", iniciarCamera);
+
+  /* ================= DESENHO (SOMENTE VISUALIZAÇÃO) ================= */
+  function getRenderedRect() {
+    const cw = canvas.clientWidth, ch = canvas.clientHeight;
+    const vw = canvas.width || 1280, vh = canvas.height || 720;
+    const canvasRatio = cw / ch, videoRatio = vw / vh;
+    let renderW = cw, renderH = ch, offsetX = 0, offsetY = 0;
+    if (canvasRatio > videoRatio) { renderW = ch * videoRatio; offsetX = (cw - renderW) / 2; }
+    else { renderH = cw / videoRatio; offsetY = (ch - renderH) / 2; }
+    return { x: offsetX, y: offsetY, w: renderW, h: renderH };
+  }
+  function getNormCoords(e) {
+    const rect = canvas.getBoundingClientRect();
+    const render = getRenderedRect();
+    const px = e.clientX - rect.left - render.x;
+    const py = e.clientY - rect.top - render.y;
+    return { normX: clamp(px / render.w, 0, 1), normY: clamp(py / render.h, 0, 1) };
+  }
+
   function renderLoop() {
-    if (video.videoWidth) {
-      // Só altera as dimensões do canvas se o tamanho do vídeo mudar (evita realocar memória 60x por segundo)
+    if (cameraPronta && video.videoWidth) {
       if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
       }
-
-      // Sincroniza a proporção do canvas de movimento com o vídeo real
-      const expectedHeight = Math.floor(160 * (video.videoHeight / video.videoWidth));
-      if (motionCanvas.height !== expectedHeight && expectedHeight > 0) {
-        motionCanvas.height = expectedHeight;
-      }
-
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      const pxX = canvas.width * boxX;
-      const pxY = canvas.height * boxY;
-      const pxW = canvas.width * boxW;
-      const pxH = canvas.height * boxH;
+      const pxX = canvas.width * caixa.x, pxY = canvas.height * caixa.y;
+      const pxW = canvas.width * caixa.w, pxH = canvas.height * caixa.h;
 
       ctx.fillStyle = isRunning ? "rgba(255, 0, 0, 0.22)" : "rgba(255, 165, 0, 0.18)";
       ctx.fillRect(pxX, pxY, pxW, pxH);
-
       ctx.strokeStyle = isRunning ? "#ff3b30" : "#00e676";
       ctx.lineWidth = isRunning ? 3 : 4;
       ctx.setLineDash(isRunning ? [] : [6, 4]);
@@ -592,16 +1046,11 @@
       if (!isRunning) {
         const handleRadius = Math.max(12, Math.min(22, canvas.width * 0.015));
         const handles = [
-          { x: pxX, y: pxY },
-          { x: pxX + pxW, y: pxY },
-          { x: pxX, y: pxY + pxH },
-          { x: pxX + pxW, y: pxY + pxH },
-          { x: pxX + pxW / 2, y: pxY },
-          { x: pxX + pxW / 2, y: pxY + pxH },
-          { x: pxX, y: pxY + pxH / 2 },
-          { x: pxX + pxW, y: pxY + pxH / 2 }
+          { x: pxX, y: pxY }, { x: pxX + pxW, y: pxY },
+          { x: pxX, y: pxY + pxH }, { x: pxX + pxW, y: pxY + pxH },
+          { x: pxX + pxW / 2, y: pxY }, { x: pxX + pxW / 2, y: pxY + pxH },
+          { x: pxX, y: pxY + pxH / 2 }, { x: pxX + pxW, y: pxY + pxH / 2 }
         ];
-
         handles.forEach(h => {
           ctx.beginPath();
           ctx.arc(h.x, h.y, handleRadius, 0, 2 * Math.PI);
@@ -611,7 +1060,6 @@
           ctx.strokeStyle = "#00e676";
           ctx.stroke();
         });
-
         ctx.font = "bold 15px sans-serif";
         ctx.fillStyle = "#00e676";
         ctx.fillText("✋ ARRASTE AS BORDAS OU BOLINHAS P/ AJUSTAR", pxX + 8, Math.max(26, pxY - 12));
@@ -619,324 +1067,245 @@
         ctx.font = "bold 16px sans-serif";
         ctx.fillStyle = "#ff3b30";
         ctx.fillText("⚠️ PRATELEIRA", pxX + 8, Math.max(26, pxY - 10));
-      }
-
-      if (isRunning && !cooldown && !isCapturing) {
-        if (checarMovimentoNaCaixa()) {
-          dispararCaptura();
+        if (DEBUG) {
+          ctx.font = "bold 14px monospace";
+          ctx.fillStyle = "#ffeb3b";
+          const a = ultimaAnalise;
+          ctx.fillText(`mov ${(a.razao * 100).toFixed(2)}%  celulas ${a.celulas}  luz ${a.offset}`, 10, canvas.height - 12);
         }
       }
+    } else {
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
     requestAnimationFrame(renderLoop);
   }
 
-  /* ================= DISPARO ULTRA-RÁPIDO EM MEMÓRIA RAM ================= */
-  function copiarFrameParaBuffer(bufferCanvas) {
-    const w = canvas.width;
-    const h = canvas.height;
-    if (bufferCanvas.width !== w || bufferCanvas.height !== h) {
-      bufferCanvas.width = w;
-      bufferCanvas.height = h;
-    }
-    const bCtx = bufferCanvas.getContext("2d");
-    // Copia o frame já desenhado na tela (leva ~1ms, sem compressão pesada)
-    bCtx.drawImage(canvas, 0, 0, w, h);
-  }
+  /* ================= ARRASTAR CAIXA ================= */
+  let dragMode = null;
+  let dragStart = { x: 0, y: 0 };
+  let initialBox = { x: 0, y: 0, w: 0, h: 0 };
 
-  async function dispararCaptura() {
-    cooldown = true;
-    isCapturing = true;
-
-    // 1. CAPTURA IMEDIATA DO FRAME 0 (no exato milissegundo da detecção, antes de mexer no DOM!)
-    copiarFrameParaBuffer(frameBufferPool[0]);
-
-    // 2. Agora sim exibe o aviso visual e o flash
-    const flash = document.getElementById("flash-overlay");
-    flash.style.opacity = "0.7";
-    setTimeout(() => flash.style.opacity = "0", 120);
-
-    statusText.innerText = `🚨 Capturando rápido...`;
-    statusDot.className = "indicator alert";
-
-    const timestamp = new Date().toLocaleString("pt-BR");
-
-    // 3. Captura os demais frames na memória bruta com intervalo curto (padrão 180ms)
-    for (let i = 1; i < burstCount; i++) {
-      await new Promise(r => setTimeout(r, burstInterval));
-      copiarFrameParaBuffer(frameBufferPool[i]);
-    }
-
-    // 4. Só converte para JPEG DEPOIS que todas as fotos já foram congeladas na memória!
-    statusText.innerText = `⏳ Processando fotos...`;
-    await new Promise(r => setTimeout(r, 20)); // Deixa a tela respirar
-
-    const fotos = [];
-    for (let i = 0; i < burstCount; i++) {
-      fotos.push(frameBufferPool[i].toDataURL("image/jpeg", 0.75));
-    }
-
-    salvarEvento({ timestamp, fotos });
-    statusText.innerText = `✅ Salvo às ${timestamp.split(" ")[1]}`;
-
-    isCapturing = false;
-
-    setTimeout(() => {
-      cooldown = false;
-      if (isRunning) {
-        statusText.innerText = "Monitorando prateleira...";
-        statusDot.className = "indicator running";
-      }
-    }, 4000);
-  }
-
-  /* ================= ARRASTAR CAIXA COM PRECISÃO ================= */
-  function handleTouchStart(e) {
-    if (isRunning) return;
+  canvas.addEventListener("pointerdown", (e) => {
+    if (isRunning || !cameraPronta) return;
     const p = getNormCoords(e);
-    
-    // Tolerância em escala normalizada (0 a 1) ~ 10% da tela (generosa no touch)
-    const tolX = 0.08; 
-    const tolY = 0.08;
+    const tol = CONFIG.interacao.tolerancia;
+    const { x, y, w, h } = caixa;
+    const noY = p.normY >= y - tol && p.normY <= y + h + tol;
+    const noX = p.normX >= x - tol && p.normX <= x + w + tol;
+    const l = Math.abs(p.normX - x) < tol && noY;
+    const r = !l && Math.abs(p.normX - (x + w)) < tol && noY;
+    const t = Math.abs(p.normY - y) < tol && noX;
+    const b = !t && Math.abs(p.normY - (y + h)) < tol && noX;
 
-    const nearLeft = Math.abs(p.normX - boxX) < tolX && p.normY >= boxY - tolY && p.normY <= boxY + boxH + tolY;
-    const nearRight = Math.abs(p.normX - (boxX + boxW)) < tolX && p.normY >= boxY - tolY && p.normY <= boxY + boxH + tolY;
-    const nearTop = Math.abs(p.normY - boxY) < tolY && p.normX >= boxX - tolX && p.normX <= boxX + boxW + tolX;
-    const nearBottom = Math.abs(p.normY - (boxY + boxH)) < tolY && p.normX >= boxX - tolX && p.normX <= boxX + boxW + tolX;
-
-    dragStartCoords = { x: p.normX, y: p.normY };
-    initialBox = { x: boxX, y: boxY, w: boxW, h: boxH };
-
-    if (nearLeft && nearTop) dragMode = "resize-tl";
-    else if (nearRight && nearTop) dragMode = "resize-tr";
-    else if (nearLeft && nearBottom) dragMode = "resize-bl";
-    else if (nearRight && nearBottom) dragMode = "resize-br";
-    else if (nearLeft) dragMode = "resize-left";
-    else if (nearRight) dragMode = "resize-right";
-    else if (nearTop) dragMode = "resize-top";
-    else if (nearBottom) dragMode = "resize-bottom";
-    else if (p.normX > boxX && p.normX < boxX + boxW && p.normY > boxY && p.normY < boxY + boxH) {
-      dragMode = "move";
-    } else {
-      dragMode = "none";
-    }
-  }
-
-  function handleTouchMove(e) {
-    if (dragMode === "none" || isRunning) return;
-
-    const p = getNormCoords(e);
-    const dx = p.normX - dragStartCoords.x;
-    const dy = p.normY - dragStartCoords.y;
-    const minSize = 0.08;
-
-    if (dragMode === "move") {
-      boxX = Math.max(0, Math.min(1 - initialBox.w, initialBox.x + dx));
-      boxY = Math.max(0, Math.min(1 - initialBox.h, initialBox.y + dy));
-    } else if (dragMode === "resize-right") {
-      boxW = Math.max(minSize, Math.min(1 - initialBox.x, initialBox.w + dx));
-    } else if (dragMode === "resize-bottom") {
-      boxH = Math.max(minSize, Math.min(1 - initialBox.y, initialBox.h + dy));
-    } else if (dragMode === "resize-left") {
-      const newX = Math.max(0, Math.min(initialBox.x + initialBox.w - minSize, initialBox.x + dx));
-      boxW = initialBox.w + (initialBox.x - newX);
-      boxX = newX;
-    } else if (dragMode === "resize-top") {
-      const newY = Math.max(0, Math.min(initialBox.y + initialBox.h - minSize, initialBox.y + dy));
-      boxH = initialBox.h + (initialBox.y - newY);
-      boxY = newY;
-    } else if (dragMode === "resize-tr") {
-      boxW = Math.max(minSize, Math.min(1 - initialBox.x, initialBox.w + dx));
-      const newY = Math.max(0, Math.min(initialBox.y + initialBox.h - minSize, initialBox.y + dy));
-      boxH = initialBox.h + (initialBox.y - newY);
-      boxY = newY;
-    } else if (dragMode === "resize-tl") {
-      const newX = Math.max(0, Math.min(initialBox.x + initialBox.w - minSize, initialBox.x + dx));
-      boxW = initialBox.w + (initialBox.x - newX);
-      boxX = newX;
-      const newY = Math.max(0, Math.min(initialBox.y + initialBox.h - minSize, initialBox.y + dy));
-      boxH = initialBox.h + (initialBox.y - newY);
-      boxY = newY;
-    } else if (dragMode === "resize-br") {
-      boxW = Math.max(minSize, Math.min(1 - initialBox.x, initialBox.w + dx));
-      boxH = Math.max(minSize, Math.min(1 - initialBox.y, initialBox.h + dy));
-    } else if (dragMode === "resize-bl") {
-      const newX = Math.max(0, Math.min(initialBox.x + initialBox.w - minSize, initialBox.x + dx));
-      boxW = initialBox.w + (initialBox.x - newX);
-      boxX = newX;
-      boxH = Math.max(minSize, Math.min(1 - initialBox.y, initialBox.h + dy));
-    }
-
-    localStorage.setItem("boxX", boxX);
-    localStorage.setItem("boxY", boxY);
-    localStorage.setItem("boxW", boxW);
-    localStorage.setItem("boxH", boxH);
-    sincronizarSliders();
-  }
-
-  function handleTouchEnd() { dragMode = "none"; }
-
-  canvas.addEventListener("mousedown", handleTouchStart);
-  window.addEventListener("mousemove", handleTouchMove);
-  window.addEventListener("mouseup", handleTouchEnd);
-  canvas.addEventListener("touchstart", handleTouchStart, { passive: true });
-  window.addEventListener("touchmove", handleTouchMove, { passive: true });
-  window.addEventListener("touchend", handleTouchEnd);
-
-  /* ================= CONTROLE DE START / STOP ================= */
-  btnToggle.addEventListener("click", () => {
-    isRunning = !isRunning;
-    if (isRunning) {
-      btnToggle.innerText = "⏹️ Parar";
-      btnToggle.classList.add("active");
-      statusDot.className = "indicator running";
-      statusText.innerText = "Monitorando prateleira...";
-      prevFrameData = null;
-    } else {
-      btnToggle.innerText = "▶️ Iniciar";
-      btnToggle.classList.remove("active");
-      statusDot.className = "indicator";
-      statusText.innerText = "Pausado. Arraste as bordas p/ regular.";
-    }
+    dragStart = { x: p.normX, y: p.normY };
+    initialBox = { x, y, w, h };
+    if (l || r || t || b) dragMode = { l, r, t, b };
+    else if (p.normX > x && p.normX < x + w && p.normY > y && p.normY < y + h) dragMode = { move: true };
+    else dragMode = null;
+    if (dragMode) { try { canvas.setPointerCapture(e.pointerId); } catch (err) {} }
   });
 
+  window.addEventListener("pointermove", (e) => {
+    if (!dragMode || isRunning) return;
+    const p = getNormCoords(e);
+    const dx = p.normX - dragStart.x, dy = p.normY - dragStart.y;
+    const ib = initialBox, min = L.caixaMin;
+
+    if (dragMode.move) { definirCaixa({ x: ib.x + dx, y: ib.y + dy, w: ib.w, h: ib.h }); return; }
+
+    let left = ib.x, top = ib.y, right = ib.x + ib.w, bottom = ib.y + ib.h;
+    if (dragMode.l) left = clamp(ib.x + dx, 0, right - min);
+    if (dragMode.r) right = clamp(ib.x + ib.w + dx, left + min, 1);
+    if (dragMode.t) top = clamp(ib.y + dy, 0, bottom - min);
+    if (dragMode.b) bottom = clamp(ib.y + ib.h + dy, top + min, 1);
+    definirCaixa({ x: left, y: top, w: right - left, h: bottom - top });
+  });
+  const fimArraste = () => { dragMode = null; };
+  window.addEventListener("pointerup", fimArraste);
+  window.addEventListener("pointercancel", fimArraste);
+
   /* ================= MODAIS E SLIDERS ================= */
-  const modalConfig = document.getElementById("modal-config");
-  const modalGallery = document.getElementById("modal-gallery");
-  document.getElementById("btn-config").addEventListener("click", () => modalConfig.style.display = "flex");
+  const modalConfig = $("modal-config");
+  const modalGallery = $("modal-gallery");
+  $("btn-config").addEventListener("click", () => modalConfig.style.display = "flex");
+
   function fecharModaisEResetar() {
     modalConfig.style.display = "none";
-    modalGallery.style.display = "none";
-    prevFrameData = null; // Reseta a base de pixels
-    if (isRunning) {
-      cooldown = true;
-      setTimeout(() => cooldown = false, 1000); // 1 segundo de segurança ao voltar para a câmera
-    }
+    fecharGaleria();
+    resetarReferencia();
+    if (isRunning) cooldownAte = Math.max(cooldownAte, performance.now() + 1000); // 1 s de segurança ao voltar
   }
-  document.getElementById("close-config").addEventListener("click", fecharModaisEResetar);
-  document.getElementById("close-gallery").addEventListener("click", fecharModaisEResetar);
+  $("close-config").addEventListener("click", fecharModaisEResetar);
+  $("close-gallery").addEventListener("click", fecharModaisEResetar);
 
-  const sliderW = document.getElementById("slider-box-w"); const valW = document.getElementById("val-box-w");
-  const sliderH = document.getElementById("slider-box-h"); const valH = document.getElementById("val-box-h");
-  const sliderX = document.getElementById("slider-box-x"); const valX = document.getElementById("val-box-x");
-  const sliderY = document.getElementById("slider-box-y"); const valY = document.getElementById("val-box-y");
+  const sliderW = $("slider-box-w"), valW = $("val-box-w");
+  const sliderH = $("slider-box-h"), valH = $("val-box-h");
+  const sliderX = $("slider-box-x"), valX = $("val-box-x");
+  const sliderY = $("slider-box-y"), valY = $("val-box-y");
 
   function sincronizarSliders() {
-    sliderW.value = Math.round(boxW * 100); valW.innerText = `${Math.round(boxW * 100)}%`;
-    sliderH.value = Math.round(boxH * 100); valH.innerText = `${Math.round(boxH * 100)}%`;
-    sliderX.value = Math.round(boxX * 100); valX.innerText = `${Math.round(boxX * 100)}%`;
-    sliderY.value = Math.round(boxY * 100); valY.innerText = `${Math.round(boxY * 100)}%`;
+    const pct = (v) => Math.round(v * 100);
+    sliderW.value = pct(caixa.w); valW.textContent = `${pct(caixa.w)}%`;
+    sliderH.value = pct(caixa.h); valH.textContent = `${pct(caixa.h)}%`;
+    // O máximo de X/Y acompanha o tamanho: a caixa nunca passa da borda
+    sliderX.max = pct(1 - caixa.w); sliderX.value = pct(caixa.x); valX.textContent = `${pct(caixa.x)}%`;
+    sliderY.max = pct(1 - caixa.h); sliderY.value = pct(caixa.y); valY.textContent = `${pct(caixa.y)}%`;
   }
   sincronizarSliders();
+  sliderW.addEventListener("input", (e) => definirCaixa({ w: e.target.value / 100 }));
+  sliderH.addEventListener("input", (e) => definirCaixa({ h: e.target.value / 100 }));
+  sliderX.addEventListener("input", (e) => definirCaixa({ x: e.target.value / 100 }));
+  sliderY.addEventListener("input", (e) => definirCaixa({ y: e.target.value / 100 }));
 
-  sliderW.addEventListener("input", (e) => { boxW = e.target.value / 100; valW.innerText = `${e.target.value}%`; localStorage.setItem("boxW", boxW); });
-  sliderH.addEventListener("input", (e) => { boxH = e.target.value / 100; valH.innerText = `${e.target.value}%`; localStorage.setItem("boxH", boxH); });
-  sliderX.addEventListener("input", (e) => { boxX = e.target.value / 100; valX.innerText = `${e.target.value}%`; localStorage.setItem("boxX", boxX); });
-  sliderY.addEventListener("input", (e) => { boxY = e.target.value / 100; valY.innerText = `${e.target.value}%`; localStorage.setItem("boxY", boxY); });
+  function ligarSlider(idSlider, idValor, chave, formatar) {
+    const s = $(idSlider), v = $(idValor);
+    s.value = estado[chave]; v.textContent = formatar(estado[chave]);
+    s.addEventListener("input", (e) => {
+      estado[chave] = parseInt(e.target.value, 10);
+      prefs.set(chave, estado[chave]);
+      v.textContent = formatar(estado[chave]);
+    });
+  }
+  $("sens-default").textContent = P.sensibilidade;
+  ligarSlider("slider-sens", "val-sens", "sensibilidade", (v) => v);
+  ligarSlider("slider-count", "val-count", "burstCount", (v) => `${v} foto${v > 1 ? "s" : ""}`);
+  ligarSlider("slider-interval", "val-interval", "burstInterval", (v) => `${v}ms`);
+  ligarSlider("slider-cooldown", "val-cooldown", "cooldownMs", (v) => `${(v / 1000).toFixed(1)}s`);
 
-  const sliderSens = document.getElementById("slider-sens"); const valSens = document.getElementById("val-sens");
-  sliderSens.value = sensibilidade; valSens.innerText = sensibilidade;
-  sliderSens.addEventListener("input", (e) => { sensibilidade = parseInt(e.target.value); localStorage.setItem("sensibilidade", sensibilidade); valSens.innerText = sensibilidade; });
-
-  const sliderCount = document.getElementById("slider-count"); const valCount = document.getElementById("val-count");
-  sliderCount.value = burstCount; valCount.innerText = `${burstCount} fotos`;
-  sliderCount.addEventListener("input", (e) => { burstCount = parseInt(e.target.value); localStorage.setItem("burstCount", burstCount); valCount.innerText = `${burstCount} fotos`; });
-
-  const sliderInterval = document.getElementById("slider-interval"); const valInterval = document.getElementById("val-interval");
-  sliderInterval.value = burstInterval; valInterval.innerText = `${burstInterval}ms`;
-  sliderInterval.addEventListener("input", (e) => { burstInterval = parseInt(e.target.value); localStorage.setItem("burstInterval", burstInterval); valInterval.innerText = `${burstInterval}ms`; });
-
-  /* ================= GALERIA E LIGHTBOX COM NAVEGAÇÃO ================= */
+  /* ================= GALERIA E LIGHTBOX ================= */
   let currentGalleryImages = [];
+  let galeriaUrls = [];
+  let galeriaToken = 0;
   let currentLightboxIndex = 0;
+  const galleryContainer = $("gallery-container");
+  const lightbox = $("lightbox");
+  const lightboxImg = $("lightbox-img");
+  const lbCounter = $("lightbox-counter");
 
-  document.getElementById("btn-gallery").addEventListener("click", async () => {
-    modalGallery.style.display = "flex";
-    const eventos = await obterEventos();
-    const container = document.getElementById("gallery-container");
-    container.innerHTML = "";
+  function mensagemGaleria(texto) {
+    galleryContainer.innerHTML = "";
+    const d = document.createElement("div");
+    d.className = "gallery-msg";
+    d.textContent = texto;
+    galleryContainer.appendChild(d);
+  }
+  function liberarUrlsGaleria() {
+    galeriaUrls.forEach(u => URL.revokeObjectURL(u));
+    galeriaUrls = [];
     currentGalleryImages = [];
+  }
+  // Aceita registros antigos (string Base64) e novos (Blob)
+  function srcDaFoto(f) {
+    if (typeof f === "string") return f;
+    if (f instanceof Blob) { const u = URL.createObjectURL(f); galeriaUrls.push(u); return u; }
+    return "";
+  }
+  function fecharGaleria() {
+    galeriaToken++;
+    modalGallery.style.display = "none";
+    lightbox.style.display = "none";
+    lightboxImg.removeAttribute("src");
+    galleryContainer.innerHTML = "";
+    liberarUrlsGaleria();
+  }
 
-    if (!eventos.length) {
-      container.innerHTML = `<div style="text-align: center; color: #888; margin-top: 40px;">Nenhum registro capturado.</div>`;
+  $("btn-gallery").addEventListener("click", async () => {
+    const token = ++galeriaToken;
+    modalGallery.style.display = "flex";
+    liberarUrlsGaleria();
+    mensagemGaleria("Carregando...");
+
+    let eventos;
+    try { eventos = await obterEventos(); }
+    catch (e) {
+      if (token !== galeriaToken) return;
+      console.error("Falha ao carregar galeria:", e);
+      mensagemGaleria("Não foi possível carregar os registros.");
+      toast(mensagemErroDB(e));
       return;
     }
+    if (token !== galeriaToken) return;
 
-    eventos.reverse().forEach((ev) => {
+    if (!eventos.length) { mensagemGaleria("Nenhum registro capturado."); return; }
+
+    galleryContainer.innerHTML = "";
+    [...eventos].reverse().forEach((ev) => {
+      const fotos = Array.isArray(ev.fotos) ? ev.fotos : [];
       const card = document.createElement("div");
       card.className = "event-card";
-      card.innerHTML = `
-        <div class="event-meta">🕒 <b>${ev.timestamp}</b> (${ev.fotos.length} fotos)</div>
-        <div class="thumb-grid"></div>
-      `;
-      const grid = card.querySelector(".thumb-grid");
 
-      ev.fotos.forEach(src => {
+      const meta = document.createElement("div");
+      meta.className = "event-meta";
+      const b = document.createElement("b");
+      b.textContent = ev.timestamp || "";
+      meta.append("🕒 ", b, ` (${fotos.length} fotos)`);
+      const grid = document.createElement("div");
+      grid.className = "thumb-grid";
+      card.append(meta, grid);
+
+      fotos.forEach((f) => {
+        const src = srcDaFoto(f);
+        if (!src) return;
         const globalIndex = currentGalleryImages.length;
         currentGalleryImages.push(src);
-
         const img = document.createElement("img");
         img.src = src;
+        img.alt = "Foto capturada";
         img.addEventListener("click", () => openLightbox(globalIndex));
         grid.appendChild(img);
       });
-      container.appendChild(card);
+      galleryContainer.appendChild(card);
     });
   });
-
-  const lightbox = document.getElementById("lightbox");
-  const lightboxImg = document.getElementById("lightbox-img");
-  const lbCounter = document.getElementById("lightbox-counter");
 
   function openLightbox(index) {
     currentLightboxIndex = index;
     atualizarLightbox();
     lightbox.style.display = "flex";
   }
-
   function atualizarLightbox() {
     lightboxImg.src = currentGalleryImages[currentLightboxIndex];
-    lbCounter.innerText = `${currentLightboxIndex + 1} / ${currentGalleryImages.length}`;
+    lbCounter.textContent = `${currentLightboxIndex + 1} / ${currentGalleryImages.length}`;
   }
-
-  document.getElementById("btn-lb-prev").addEventListener("click", (e) => {
+  $("btn-lb-prev").addEventListener("click", (e) => {
     e.stopPropagation();
-    if (currentLightboxIndex > 0) {
-      currentLightboxIndex--;
-      atualizarLightbox();
-    }
+    if (currentLightboxIndex > 0) { currentLightboxIndex--; atualizarLightbox(); }
   });
-
-  document.getElementById("btn-lb-next").addEventListener("click", (e) => {
+  $("btn-lb-next").addEventListener("click", (e) => {
     e.stopPropagation();
-    if (currentLightboxIndex < currentGalleryImages.length - 1) {
-      currentLightboxIndex++;
-      atualizarLightbox();
-    }
+    if (currentLightboxIndex < currentGalleryImages.length - 1) { currentLightboxIndex++; atualizarLightbox(); }
   });
-
-  document.getElementById("btn-close-lightbox").addEventListener("click", (e) => {
+  $("btn-close-lightbox").addEventListener("click", (e) => {
     e.stopPropagation();
     lightbox.style.display = "none";
   });
+  lightbox.addEventListener("click", (e) => { if (e.target === lightbox) lightbox.style.display = "none"; });
 
-  // Fechar clicando fora da imagem (mas não nos botões)
-  lightbox.addEventListener("click", (e) => {
-    if (e.target === lightbox) {
-      lightbox.style.display = "none";
+  $("btn-clear").addEventListener("click", async () => {
+    if (!confirm("Apagar todos os registros da galeria?")) return;
+    try {
+      await limparEventos();
+      fecharModaisEResetar();
+      setStatus("Galeria limpa.", isRunning ? "running" : "");
+    } catch (e) {
+      console.error("Falha ao limpar:", e);
+      toast("Não foi possível apagar os registros. " + mensagemErroDB(e));
     }
   });
 
-  document.getElementById("btn-clear").addEventListener("click", async () => {
-    if (confirm("Apagar todos os registros da galeria?")) {
-      const tx = db.transaction("eventos", "readwrite");
-      tx.objectStore("eventos").clear();
-      modalGallery.style.display = "none";
-      statusText.innerText = "Galeria limpa.";
+  /* ================= INICIALIZAÇÃO ================= */
+  (async function iniciarApp() {
+    $("version-badge").textContent = "v" + APP_VERSION;
+    requestAnimationFrame(renderLoop);
+    const dbOk = await initDB();
+    if (!dbOk) {
+      toast("Não foi possível abrir o armazenamento do navegador. As capturas podem não ser salvas.", 7000);
+    } else if (navigator.storage && navigator.storage.persist) {
+      navigator.storage.persist().catch(() => {}); // pede para o navegador não apagar os registros sozinho
     }
-  });
-
-  // Inicialização
-  initDB().then(initCamera);
+    iniciarCamera(); // a câmera inicia mesmo se o banco falhar
+  })();
 </script>
 
 </body>
