@@ -183,14 +183,24 @@
     }
     .lightbox-nav {
       position: absolute;
-      bottom: 20px;
+      top: 50%;
       left: 0;
       width: 100%;
       display: flex;
-      justify-content: center;
-      align-items: center;
-      gap: 20px;
+      justify-content: space-between;
+      padding: 0 16px;
+      transform: translateY(-50%);
+      pointer-events: none;
       z-index: 210;
+    }
+    .lightbox-nav button { pointer-events: auto; }
+    #lightbox-counter {
+      color: #fff;
+      font-size: 14px;
+      font-weight: bold;
+      background: rgba(0,0,0,0.5);
+      padding: 4px 10px;
+      border-radius: 12px;
     }
     .btn-back {
       background: rgba(255, 255, 255, 0.15);
@@ -323,11 +333,11 @@
 <div id="lightbox">
   <div class="lightbox-toolbar">
     <button class="btn-back" id="btn-close-lightbox">⬅️ Voltar para a Galeria</button>
+    <span id="lightbox-counter">1 / 1</span>
   </div>
   <img id="lightbox-img" src="" alt="Zoom">
   <div class="lightbox-nav">
     <button class="btn-nav" id="btn-lb-prev">◀️</button>
-    <span id="lightbox-counter">1 / 1</span>
     <button class="btn-nav" id="btn-lb-next">▶️</button>
   </div>
 </div>
@@ -529,6 +539,13 @@
     if (video.videoWidth) {
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
+
+      // Sincroniza a proporção do canvas de movimento com o vídeo real (ex: 16:9, 4:3)
+      // Isso elimina o erro de disparo antes da linha
+      const expectedHeight = Math.floor(160 * (video.videoHeight / video.videoWidth));
+      if (motionCanvas.height !== expectedHeight && expectedHeight > 0) {
+        motionCanvas.height = expectedHeight;
+      }
 
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
@@ -737,8 +754,17 @@
   const modalConfig = document.getElementById("modal-config");
   const modalGallery = document.getElementById("modal-gallery");
   document.getElementById("btn-config").addEventListener("click", () => modalConfig.style.display = "flex");
-  document.getElementById("close-config").addEventListener("click", () => modalConfig.style.display = "none");
-  document.getElementById("close-gallery").addEventListener("click", () => modalGallery.style.display = "none");
+  function fecharModaisEResetar() {
+    modalConfig.style.display = "none";
+    modalGallery.style.display = "none";
+    prevFrameData = null; // Reseta a base de pixels
+    if (isRunning) {
+      cooldown = true;
+      setTimeout(() => cooldown = false, 1000); // 1 segundo de segurança ao voltar para a câmera
+    }
+  }
+  document.getElementById("close-config").addEventListener("click", fecharModaisEResetar);
+  document.getElementById("close-gallery").addEventListener("click", fecharModaisEResetar);
 
   const sliderW = document.getElementById("slider-box-w"); const valW = document.getElementById("val-box-w");
   const sliderH = document.getElementById("slider-box-h"); const valH = document.getElementById("val-box-h");
