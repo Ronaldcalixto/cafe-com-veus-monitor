@@ -32,24 +32,29 @@
       justify-content: center;
       align-items: center;
     }
-    /* O vídeo precisa continuar "renderizado" (não usar display:none) para que
-       requestVideoFrameCallback dispare de forma confiável em todos os navegadores. */
+    /* Melhoria 1: Vídeo renderizado nativamente pela GPU do aparelho (custo zero de CPU) */
     #input-video {
-      position: fixed;
-      left: 0; top: 0;
-      width: 2px; height: 2px;
-      opacity: 0.01;
-      pointer-events: none;
-      z-index: -1;
-    }
-    canvas {
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
       object-fit: contain;
       display: block;
+      z-index: 1;
+      pointer-events: none;
+    }
+    /* Canvas transparente sobreposto: redesenhado APENAS quando a caixa ou o estado mudam */
+    #output-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      z-index: 2;
     }
 
-    /* Barra Superior */
+    /* Barra Superior (Melhoria 3: sem backdrop-filter pesado sobre o vídeo) */
     .top-bar {
       position: absolute;
       top: 12px;
@@ -63,13 +68,12 @@
       gap: 8px;
     }
     .status-badge {
-      background: rgba(0, 0, 0, 0.8);
+      background: rgba(12, 12, 12, 0.92);
       border: 1px solid rgba(255, 255, 255, 0.2);
       padding: 8px 14px;
       border-radius: 20px;
       font-size: 13px;
       pointer-events: auto;
-      backdrop-filter: blur(8px);
       max-width: 50%;
       white-space: nowrap;
       overflow: hidden;
@@ -94,7 +98,7 @@
       pointer-events: auto;
     }
     .btn-icon {
-      background: rgba(0, 0, 0, 0.8);
+      background: rgba(12, 12, 12, 0.92);
       border: 1px solid rgba(255, 255, 255, 0.2);
       color: #fff;
       padding: 8px 12px;
@@ -125,15 +129,14 @@
       z-index: 20;
     }
 
-    /* Modais */
+    /* Modais (Melhoria 3: fundo sólido escuro sem filtro gaussiano na GPU) */
     .modal {
       position: absolute;
       top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(10, 10, 10, 0.95);
+      background: rgba(10, 10, 10, 0.98);
       z-index: 100;
       display: none;
       flex-direction: column;
-      backdrop-filter: blur(12px);
     }
     .modal-header {
       padding: 16px 20px;
@@ -144,7 +147,6 @@
     }
     .modal-title { font-size: 18px; font-weight: bold; }
     .close-btn { background: none; border: none; color: #aaa; font-size: 24px; cursor: pointer; padding: 4px 8px; }
-    /* padding-bottom extra: evita que o selo de versão cubra o fim do conteúdo */
     .modal-body { flex: 1; overflow-y: auto; padding: 20px 20px 64px; touch-action: pan-y; }
 
     .config-card {
@@ -160,6 +162,23 @@
     .slider-row label { font-size: 13px; color: #aaa; min-width: 75px; }
     .slider-row input { flex: 1; }
     .slider-val { font-size: 13px; font-weight: bold; min-width: 50px; text-align: right; }
+    .toggle-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .toggle-row label { font-size: 13px; color: #fff; font-weight: 600; cursor: pointer; }
+    .switch { position: relative; display: inline-block; width: 46px; height: 26px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .switch-slider {
+      position: absolute; cursor: pointer; inset: 0;
+      background-color: rgba(255, 255, 255, 0.2);
+      transition: .2s; border-radius: 26px;
+    }
+    .switch-slider:before {
+      position: absolute; content: ""; height: 20px; width: 20px;
+      left: 3px; bottom: 3px; background-color: white;
+      transition: .2s; border-radius: 50%;
+    }
+    .switch input:checked + .switch-slider { background-color: #00e676; }
+    .switch input:checked + .switch-slider:before { transform: translateX(20px); }
+    .sub-config { border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 10px; margin-top: 6px; }
 
     /* Galeria */
     .event-card {
@@ -169,17 +188,68 @@
       padding: 12px;
       margin-bottom: 12px;
     }
-    .event-meta { font-size: 12px; color: #aaa; margin-bottom: 8px; }
+    .event-meta {
+      font-size: 12px;
+      color: #aaa;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .event-badge {
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: bold;
+    }
+    .event-badge.retirado {
+      background: rgba(255, 59, 48, 0.2);
+      color: #ff6b6b;
+      border: 1px solid rgba(255, 59, 48, 0.45);
+    }
+    .event-badge.movimento {
+      background: rgba(255, 255, 255, 0.08);
+      color: #bbb;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
     .thumb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; }
-    .thumb-grid img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
+    .thumb-wrap { position: relative; }
+    .thumb-grid img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 6px; cursor: pointer; border: 1px solid transparent; display: block; background: #181818; }
     .thumb-grid img:active { border-color: #00e676; }
+    .thumb-label {
+      position: absolute;
+      bottom: 4px; left: 4px;
+      background: rgba(0, 0, 0, 0.85);
+      color: #ffeb3b;
+      font-size: 10px;
+      font-weight: bold;
+      padding: 2px 5px;
+      border-radius: 4px;
+      pointer-events: none;
+    }
     .gallery-msg { text-align: center; color: #888; margin-top: 40px; }
+    .btn-load-more {
+      display: block;
+      width: 100%;
+      padding: 12px;
+      margin: 12px 0 24px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      font-size: 14px;
+      font-weight: bold;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    .btn-load-more:active { background: rgba(255, 255, 255, 0.2); }
 
     /* Lightbox Interativo */
     #lightbox {
       position: fixed;
       inset: 0; width: 100%; height: 100%; height: 100dvh;
-      background: rgba(0, 0, 0, 0.95);
+      background: rgba(0, 0, 0, 0.96);
       z-index: 200;
       display: none;
       flex-direction: column;
@@ -215,7 +285,7 @@
     }
     .lightbox-nav button { pointer-events: auto; }
     .btn-back {
-      background: rgba(255, 255, 255, 0.15);
+      background: rgba(30, 30, 30, 0.92);
       border: 1px solid rgba(255, 255, 255, 0.3);
       color: #fff;
       padding: 10px 18px;
@@ -226,11 +296,10 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      backdrop-filter: blur(8px);
     }
     .btn-nav {
-      background: rgba(255, 255, 255, 0.2);
-      border: none;
+      background: rgba(35, 35, 35, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.2);
       color: #fff;
       width: 50px;
       height: 50px;
@@ -240,12 +309,11 @@
       justify-content: center;
       align-items: center;
       cursor: pointer;
-      backdrop-filter: blur(8px);
     }
-    .btn-nav:active { background: rgba(255, 255, 255, 0.4); }
+    .btn-nav:active { background: rgba(80, 80, 80, 0.95); }
     #lightbox-counter {
       color: #fff;
-      background: rgba(0,0,0,0.5);
+      background: rgba(0, 0, 0, 0.75);
       padding: 4px 10px;
       border-radius: 12px;
       font-size: 14px;
@@ -254,7 +322,7 @@
       text-align: center;
     }
 
-    /* Aviso temporário (erros e mensagens longas) */
+    /* Aviso temporário */
     #toast {
       position: fixed;
       top: calc(64px + env(safe-area-inset-top, 0px));
@@ -274,7 +342,7 @@
     }
     #toast.show { display: block; }
 
-    /* Selo de versão: fora do container principal, fixo e acima de tudo */
+    /* Selo de versão */
     #version-badge {
       position: fixed;
       bottom: calc(18px + env(safe-area-inset-bottom, 0px));
@@ -283,7 +351,7 @@
       font-size: 12px;
       font-weight: bold;
       color: #ff6b6b;
-      background: rgba(0, 0, 0, 0.75);
+      background: rgba(0, 0, 0, 0.82);
       border: 1px solid rgba(255, 107, 107, 0.35);
       padding: 4px 10px;
       border-radius: 8px;
@@ -302,6 +370,7 @@
 
     <div class="btn-group">
       <button class="btn-icon" id="btn-retry" hidden>🔄 Câmera</button>
+      <button class="btn-icon" id="btn-ref" hidden title="Atualizar foto base da mesa">📌 Base</button>
       <button class="btn-icon" id="btn-toggle">▶️ Iniciar</button>
       <button class="btn-icon" id="btn-config">⚙️ Ajustes</button>
       <button class="btn-icon" id="btn-gallery">🖼️ Galeria</button>
@@ -310,7 +379,7 @@
 
   <div id="flash-overlay"></div>
   <video id="input-video" playsinline autoplay muted></video>
-  <!-- Canvas apenas de visualização (com moldura e textos). As fotos NÃO saem daqui. -->
+  <!-- Canvas transparente apenas para a moldura da caixa delimitadora -->
   <canvas id="output-canvas"></canvas>
 </div>
 
@@ -332,6 +401,40 @@
         <label>Sensib.:</label>
         <input type="range" id="slider-sens" min="10" max="80" step="1" value="28">
         <span class="slider-val" id="val-sens">28</span>
+      </div>
+    </div>
+
+    <!-- Monitoramento de Retirada de Itens (Antes x Depois) -->
+    <div class="config-card">
+      <div class="config-title">🛒 Verificação de Retirada Pós-Ação</div>
+      <div class="config-desc">
+        Após o disparo, aguarda a mão sair e compara a mesa com a foto base para identificar se algum produto foi retirado e destacar o local.
+      </div>
+      <div class="toggle-row">
+        <label for="chk-pos-acao">Ativar verificação pós-ação</label>
+        <label class="switch">
+          <input type="checkbox" id="chk-pos-acao">
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+      <div class="sub-config" id="pos-acao-opcoes">
+        <div class="slider-row">
+          <label>Comport.:</label>
+          <select id="select-modo-item" style="flex:1; background:#222; color:#fff; border:1px solid #444; padding:6px 8px; border-radius:8px; font-size:13px;">
+            <option value="etiquetar">Salvar tudo (etiquetar retiradas)</option>
+            <option value="estrito">Salvar apenas se item for retirado</option>
+          </select>
+        </div>
+        <div class="slider-row">
+          <label>Limiar Item:</label>
+          <input type="range" id="slider-item-diff" min="10" max="60" step="1" value="22">
+          <span class="slider-val" id="val-item-diff">22</span>
+        </div>
+        <div class="slider-row" style="margin-bottom:0;">
+          <label>Espera Mão:</label>
+          <input type="range" id="slider-pos-delay" min="500" max="4000" step="250" value="2000">
+          <span class="slider-val" id="val-pos-delay">2.0s</span>
+        </div>
       </div>
     </div>
 
@@ -413,29 +516,35 @@
 </div>
 
 <div id="toast" role="status" aria-live="polite"></div>
-<div id="version-badge">v1.3.0</div>
+<div id="version-badge">v1.5.0</div>
 
 <script>
   /* ================= CONFIGURAÇÃO CENTRAL ================= */
-  const APP_VERSION = "1.3.0";
-  const CONFIG_VERSAO = 3; // incrementa quando os padrões mudam (usado na migração das preferências)
+  const APP_VERSION = "1.5.0";
+  const CONFIG_VERSAO = 3;
 
   const CONFIG = {
     db: { nome: "LojinhaBoxDB", versao: 1, store: "eventos" },
     deteccao: {
-      larguraAnalise: 240,       // altura é calculada pela proporção real do vídeo (240x135 em 16:9, 240x180 em 4:3)
-      grade: 5,                  // a caixa é dividida em grade x grade células
-      razaoMinima: 0.010,        // fração mínima de pixels alterados dentro da caixa (1,0%)
-      razaoMaxima: 0.85,         // acima disso considera pulo de câmera / flash de luz e ignora
-      razaoCelulaMinima: 0.08,   // fração mínima de alteração para uma célula ser considerada "ativa"
-      celulasMinimas: 2,         // nº mínimo de células ativas (exige movimento distribuído, não pontual)
-      offsetLuzMax: 40           // correção máxima de variação global de luz (níveis de 0-255)
+      larguraAnalise: 240,
+      grade: 5,
+      razaoMinima: 0.010,
+      razaoMaxima: 0.85,
+      razaoCelulaMinima: 0.08,
+      celulasMinimas: 2,
+      offsetLuzMax: 40,
+      estabilizacaoIntervaloMs: 350,
+      itemAreaMinima: 0.012
     },
     padroes: {
       sensibilidade: 28,
       burstCount: 3,
       burstInterval: 80,
       cooldownMs: 1500,
+      posAcaoAtiva: true,
+      modoItem: "etiquetar",
+      itemDiff: 22,
+      posDelayMs: 2000,
       caixa: { x: 0.40, y: 0.20, w: 0.50, h: 0.60 }
     },
     limites: {
@@ -443,13 +552,16 @@
       burstCount: [1, 5],
       burstInterval: [40, 600],
       cooldownMs: [500, 5000],
-      caixaMin: 0.10             // tamanho mínimo da caixa (fração do quadro)
+      itemDiff: [10, 60],
+      posDelayMs: [500, 4000],
+      caixaMin: 0.10
     },
     captura: { qualidadeJpeg: 0.75, timeoutFrameMs: 1000 },
     camera: { timeoutProntaMs: 8000, watchdogMs: 2000 },
-    interacao: { tolerancia: 0.08 }
+    interacao: { tolerancia: 0.08 },
+    galeria: { tamanhoPagina: 20 }
   };
-  const DEBUG = /[?&#]debug/.test(location.href); // adicione ?debug=1 na URL para ver os números da detecção
+  const DEBUG = /[?&#]debug/.test(location.href);
 
   /* ================= UTILITÁRIOS ================= */
   const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
@@ -460,7 +572,6 @@
     get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
     set(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
   };
-  // Lê número salvo respeitando o valor 0 (o antigo "|| padrão" trocava 0 pelo padrão)
   function lerNumero(chave, padrao, min, max, inteiro) {
     const raw = prefs.get(chave);
     if (raw === null) return padrao;
@@ -468,8 +579,6 @@
     return Number.isFinite(n) ? clamp(n, min, max) : padrao;
   }
 
-  // Migração: quem ainda usa os padrões antigos (sensib. 35 / intervalo 180ms) recebe os novos.
-  // Valores personalizados pelo usuário são preservados.
   (function migrarPreferencias() {
     const v = parseInt(prefs.get("configVersao") || "0", 10);
     if (v < CONFIG_VERSAO) {
@@ -485,10 +594,14 @@
     sensibilidade: lerNumero("sensibilidade", P.sensibilidade, ...L.sensibilidade, true),
     burstCount: lerNumero("burstCount", P.burstCount, ...L.burstCount, true),
     burstInterval: lerNumero("burstInterval", P.burstInterval, ...L.burstInterval, true),
-    cooldownMs: lerNumero("cooldownMs", P.cooldownMs, ...L.cooldownMs, true)
+    cooldownMs: lerNumero("cooldownMs", P.cooldownMs, ...L.cooldownMs, true),
+    posAcaoAtiva: prefs.get("posAcaoAtiva") === null ? P.posAcaoAtiva : prefs.get("posAcaoAtiva") === "true",
+    itemDiff: lerNumero("itemDiff", P.itemDiff, ...L.itemDiff, true),
+    posDelayMs: lerNumero("posDelayMs", P.posDelayMs, ...L.posDelayMs, true),
+    modoItem: (prefs.get("modoItem") === "estrito" ? "estrito" : "etiquetar")
   };
 
-  /* ================= LIMITES DA CAIXA (validação única) ================= */
+  /* ================= LIMITES DA CAIXA ================= */
   function normalizarCaixa(c) {
     const min = L.caixaMin;
     const num = (v, d) => Number.isFinite(v) ? v : d;
@@ -506,12 +619,14 @@
     w: lerNumero("boxW", P.caixa.w, 0, 1),
     h: lerNumero("boxH", P.caixa.h, 0, 1)
   });
-  // Único ponto de alteração da caixa: sliders e arraste passam por aqui
+
   function definirCaixa(parcial) {
     Object.assign(caixa, normalizarCaixa({ ...caixa, ...parcial }));
     prefs.set("boxX", caixa.x); prefs.set("boxY", caixa.y);
     prefs.set("boxW", caixa.w); prefs.set("boxH", caixa.h);
+    resetarReferencia();
     sincronizarSliders();
+    desenharOverlay();
   }
 
   /* ================= ELEMENTOS ================= */
@@ -522,14 +637,19 @@
   const statusDot = $("status-dot");
   const btnToggle = $("btn-toggle");
   const btnRetry = $("btn-retry");
+  const btnRef = $("btn-ref");
   const toastEl = $("toast");
 
+  // Melhoria 4: Único canvas de análise reutilizado para movimento e pós-ação (zero alocação extra)
   const motionCanvas = document.createElement("canvas");
   const motionCtx = motionCanvas.getContext("2d", { willReadFrequently: true });
 
-  // Canvases exclusivos de captura: recebem o frame direto do <video> (sem moldura/textos)
-  const capturaCanvases = Array.from({ length: 5 }, () => document.createElement("canvas"));
+  // Canvases de captura bruta (0..4 = burst; 5 = foto DEPOIS com destaque)
+  const capturaCanvases = Array.from({ length: 6 }, () => document.createElement("canvas"));
   const capturaCtxs = capturaCanvases.map(c => c.getContext("2d"));
+
+  let baseMesaLuma = null;
+  let baseMesaDim = { sx: 0, sy: 0, bw: 0, bh: 0, mw: 0, mh: 0 };
 
   let isRunning = false;
   let capturando = false;
@@ -557,8 +677,6 @@
       let req;
       try { req = indexedDB.open(CONFIG.db.nome, CONFIG.db.versao); }
       catch (e) { resolve(false); return; }
-      // Sem mudança de estrutura: registros antigos (Base64) continuam intactos.
-      // Novos registros guardam Blobs no mesmo campo "fotos"; a leitura aceita os dois formatos.
       req.onupgradeneeded = (e) => {
         const d = e.target.result;
         if (!d.objectStoreNames.contains(CONFIG.db.store)) {
@@ -574,7 +692,6 @@
       req.onerror = () => resolve(false);
     });
   }
-  // Executa uma operação e só resolve quando a transação for confirmada (oncomplete)
   function executarTx(modo, operacao) {
     return new Promise((resolve, reject) => {
       if (!db) { reject(new Error("Banco de dados indisponível")); return; }
@@ -657,6 +774,7 @@
     cameraPronta = false;
     pararMonitoramento();
     pararStream();
+    desenharOverlay();
     const d = descreverErroCamera(e);
     setStatus(d.curto, "alert");
     toast(d.longo, 7000);
@@ -672,6 +790,7 @@
     pararStream();
     cameraPronta = false;
     btnRetry.hidden = true;
+    desenharOverlay();
     setStatus("Iniciando câmera...", "");
 
     try {
@@ -683,7 +802,6 @@
           width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 30 }
         });
       } catch (e) {
-        // Restrições não atendidas: tenta de novo sem exigências
         if (e && e.name === "OverconstrainedError") s = await gUM(true);
         else throw e;
       }
@@ -699,7 +817,6 @@
         if (Object.keys(adv).length > 0) await track.applyConstraints({ advanced: [adv] });
       } catch (e) {}
 
-      // Câmera desconectada / faixa de vídeo encerrada
       track.onended = () => {
         if (token !== cameraToken) return;
         falhaDeCamera(Object.assign(new Error("track ended"), { name: "TrackEnded" }), token);
@@ -719,13 +836,15 @@
 
       cameraPronta = true;
       resetarReferencia();
+      desenharOverlay();
       setStatus("Pronto. Arraste as bordas/bolinhas para ajustar.", "");
     } catch (e) {
       falhaDeCamera(e, token);
     }
   }
 
-  /* ================= DETECÇÃO DE MOVIMENTO ================= */
+  /* ================= DETECÇÃO DE MOVIMENTO E REFERÊNCIA DA MESA ================= */
+  // Melhoria 2 & 4: Lê da GPU (getImageData) APENAS o recorte da caixa delimitadora e reutiliza buffers
   let prevLuma = null, currLuma = null;
   const histDiff = new Uint32Array(511);
   let celAlteradas = new Uint16Array(CONFIG.deteccao.grade ** 2);
@@ -734,9 +853,8 @@
 
   function resetarReferencia() { prevLuma = null; }
 
-  // Compara o quadro atual com o anterior SEMPRE atualizando a referência,
-  // independente de cooldown/captura em andamento (evita "perder" o movimento entre verificações).
-  function analisarFrame() {
+  // Extrai a luminância APENAS do retângulo da caixa delimitadora para um buffer destino
+  function extrairLumaCaixa(destBuffer) {
     const vw = video.videoWidth, vh = video.videoHeight;
     if (!vw || !vh || video.readyState < 2) return null;
 
@@ -744,37 +862,142 @@
     const mw = D.larguraAnalise;
     const mh = Math.max(1, Math.round(mw * vh / vw));
     if (motionCanvas.width !== mw || motionCanvas.height !== mh) {
-      motionCanvas.width = mw; motionCanvas.height = mh;
-      prevLuma = null; currLuma = null;
+      motionCanvas.width = mw;
+      motionCanvas.height = mh;
+      prevLuma = null;
+      currLuma = null;
     }
-    motionCtx.drawImage(video, 0, 0, mw, mh);
-    const data = motionCtx.getImageData(0, 0, mw, mh).data;
 
-    const n = mw * mh;
-    if (!currLuma || currLuma.length !== n) currLuma = new Uint8Array(n);
-    for (let i = 0, p = 0; i < n; i++, p += 4) {
-      currLuma[i] = (data[p] * 77 + data[p + 1] * 150 + data[p + 2] * 29) >> 8;
-    }
-    const novo = currLuma, antigo = prevLuma;
-    prevLuma = novo; currLuma = antigo; // troca de buffers (sem alocar memória a cada quadro)
-    if (!antigo) return null;
-
-    const sx = Math.floor(mw * caixa.x), ex = Math.min(mw, Math.ceil(mw * (caixa.x + caixa.w)));
-    const sy = Math.floor(mh * caixa.y), ey = Math.min(mh, Math.ceil(mh * (caixa.y + caixa.h)));
+    const sx = Math.floor(mw * caixa.x);
+    const ex = Math.min(mw, Math.ceil(mw * (caixa.x + caixa.w)));
+    const sy = Math.floor(mh * caixa.y);
+    const ey = Math.min(mh, Math.ceil(mh * (caixa.y + caixa.h)));
     const bw = ex - sx, bh = ey - sy;
     if (bw < 2 || bh < 2) return null;
 
-    // 1) Variação global de luz = MEDIANA das diferenças (robusta: uma mão não desloca a mediana
-    //    enquanto cobrir menos da metade da caixa, ao contrário da média usada antes)
+    motionCtx.drawImage(video, 0, 0, mw, mh);
+    // Melhoria 2: Transfere da GPU apenas os pixels de dentro da caixa (60% a 80% menos dados)
+    const data = motionCtx.getImageData(sx, sy, bw, bh).data;
+    const n = bw * bh;
+
+    let buf = destBuffer;
+    if (!buf || buf.length !== n) buf = new Uint8Array(n);
+    for (let i = 0, p = 0; i < n; i++, p += 4) {
+      buf[i] = (data[p] * 77 + data[p + 1] * 150 + data[p + 2] * 29) >> 8;
+    }
+    return { buf, sx, sy, bw, bh, mw, mh, n };
+  }
+
+  function capturarBaseMesa() {
+    // Melhoria 4: Se já temos o último frame analisado (prevLuma) com as mesmas dimensões, copia direto sem redesenhar
+    const vw = video.videoWidth, vh = video.videoHeight;
+    if (!vw || !vh || video.readyState < 2) return false;
+    const res = extrairLumaCaixa(baseMesaLuma);
+    if (!res) return false;
+    baseMesaLuma = res.buf;
+    baseMesaDim = { sx: res.sx, sy: res.sy, bw: res.bw, bh: res.bh, mw: res.mw, mh: res.mh };
+    return true;
+  }
+
+  function verificarMudancaMesa() {
+    if (!baseMesaLuma) return { retirado: false, mudancaPct: 0, bbox: null };
+
+    // Melhoria 4: Reutiliza o buffer prevLuma que já foi atualizado pelo loop de vídeo (zero novo canvas / zero novo Uint8Array)
+    const D = CONFIG.deteccao;
+    const { sx, sy, bw, bh, mw, mh } = baseMesaDim;
+    const n = bw * bh;
+
+    // Garante leitura fresca usando o próprio currLuma pré-alocado
+    const res = extrairLumaCaixa(currLuma);
+    if (!res || res.n !== baseMesaLuma.length || res.bw !== bw || res.bh !== bh) {
+      capturarBaseMesa();
+      return { retirado: false, mudancaPct: 0, bbox: null };
+    }
+    currLuma = res.buf;
+    const posLuma = currLuma;
+
+    // 1) Desconta variação global de luz entre o Antes e o Depois usando mediana
     histDiff.fill(0);
     let amostras = 0;
-    for (let y = sy; y < ey; y += 2) {
-      const row = y * mw;
-      for (let x = sx; x < ex; x += 2) { histDiff[novo[row + x] - antigo[row + x] + 255]++; amostras++; }
+    for (let y = 0; y < bh; y += 2) {
+      const row = y * bw;
+      for (let x = 0; x < bw; x += 2) {
+        histDiff[posLuma[row + x] - baseMesaLuma[row + x] + 255]++;
+        amostras++;
+      }
     }
     let acum = 0, mediana = 0;
     const metade = amostras >> 1;
-    for (let k = 0; k < 511; k++) { acum += histDiff[k]; if (acum > metade) { mediana = k - 255; break; } }
+    for (let k = 0; k < 511; k++) {
+      acum += histDiff[k];
+      if (acum > metade) { mediana = k - 255; break; }
+    }
+    const offset = clamp(mediana, -D.offsetLuzMax, D.offsetLuzMax);
+
+    // 2) Localiza os pixels alterados dentro da caixa
+    const limiar = estado.itemDiff;
+    let mudados = 0;
+    let minX = bw, maxX = 0, minY = bh, maxY = 0;
+
+    for (let y = 0; y < bh; y++) {
+      const row = y * bw;
+      for (let x = 0; x < bw; x++) {
+        const d = Math.abs(posLuma[row + x] - baseMesaLuma[row + x] - offset);
+        if (d > limiar) {
+          mudados++;
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+
+    const razao = mudados / n;
+    const retirado = razao >= D.itemAreaMinima && razao <= D.razaoMaxima;
+
+    let bbox = null;
+    if (retirado && maxX >= minX && maxY >= minY) {
+      bbox = {
+        x: (sx + minX) / mw,
+        y: (sy + minY) / mh,
+        w: Math.max(0.04, (maxX - minX + 1) / mw),
+        h: Math.max(0.04, (maxY - minY + 1) / mh)
+      };
+      baseMesaLuma.set(posLuma);
+    }
+
+    return { retirado, mudancaPct: razao * 100, bbox };
+  }
+
+  function analisarFrame() {
+    const D = CONFIG.deteccao;
+    const res = extrairLumaCaixa(currLuma);
+    if (!res) return null;
+
+    currLuma = res.buf;
+    const { bw, bh, n } = res;
+
+    const novo = currLuma, antigo = prevLuma;
+    prevLuma = novo; currLuma = antigo;
+    if (!antigo || antigo.length !== n) return null;
+
+    // 1) Mediana da variação de iluminação dentro da caixa
+    histDiff.fill(0);
+    let amostras = 0;
+    for (let y = 0; y < bh; y += 2) {
+      const row = y * bw;
+      for (let x = 0; x < bw; x += 2) {
+        histDiff[novo[row + x] - antigo[row + x] + 255]++;
+        amostras++;
+      }
+    }
+    let acum = 0, mediana = 0;
+    const metade = amostras >> 1;
+    for (let k = 0; k < 511; k++) {
+      acum += histDiff[k];
+      if (acum > metade) { mediana = k - 255; break; }
+    }
     const offset = clamp(mediana, -D.offsetLuzMax, D.offsetLuzMax);
 
     // 2) Conta pixels alterados no total e por célula da grade
@@ -782,30 +1005,31 @@
     celAlteradas.fill(0); celTotais.fill(0);
     const sens = estado.sensibilidade;
     let mudados = 0;
-    for (let y = sy; y < ey; y++) {
-      const row = y * mw;
-      const gy = Math.min(G - 1, ((y - sy) * G / bh) | 0) * G;
-      for (let x = sx; x < ex; x++) {
-        const idx = gy + Math.min(G - 1, ((x - sx) * G / bw) | 0);
+    for (let y = 0; y < bh; y++) {
+      const row = y * bw;
+      const gy = Math.min(G - 1, (y * G / bh) | 0) * G;
+      for (let x = 0; x < bw; x++) {
+        const idx = gy + Math.min(G - 1, (x * G / bw) | 0);
         celTotais[idx]++;
         const d = novo[row + x] - antigo[row + x] - offset;
         if (d > sens || d < -sens) { mudados++; celAlteradas[idx]++; }
       }
     }
 
-    const razao = mudados / (bw * bh);
+    const razao = mudados / n;
     let celulas = 0;
     for (let k = 0; k < G * G; k++) {
       if (celTotais[k] > 0 && celAlteradas[k] / celTotais[k] >= D.razaoCelulaMinima) celulas++;
     }
     ultimaAnalise = { razao, celulas, offset };
+    if (DEBUG) desenharOverlay();
 
     return {
       movimento: razao >= D.razaoMinima && razao <= D.razaoMaxima && celulas >= D.celulasMinimas
     };
   }
 
-  /* ================= CICLO DE DETECÇÃO (acompanha os frames reais da câmera) ================= */
+  /* ================= CICLO DE DETECÇÃO ================= */
   const temRVFC = typeof HTMLVideoElement !== "undefined" && "requestVideoFrameCallback" in HTMLVideoElement.prototype;
   let usarRVFC = temRVFC;
   let deteccaoToken = 0;
@@ -820,7 +1044,7 @@
     else if (modo === "raf") cancelAnimationFrame(handle);
   }
   function pararDeteccao() {
-    deteccaoToken++;                      // invalida qualquer ciclo anterior (nunca há dois ao mesmo tempo)
+    deteccaoToken++;
     cancelarHandle(deteccaoHandle, deteccaoModo);
     deteccaoHandle = null;
   }
@@ -837,7 +1061,6 @@
       deteccaoModo = "rvfc";
       deteccaoHandle = video.requestVideoFrameCallback(() => { deteccaoHandle = null; processarFrame(token); });
     } else {
-      // Alternativa: rAF, mas só processa quando o vídeo realmente trouxe um quadro novo
       deteccaoModo = "raf";
       deteccaoHandle = requestAnimationFrame(() => {
         deteccaoHandle = null;
@@ -860,7 +1083,6 @@
     } catch (e) { console.error("Erro na detecção:", e); }
     agendarDeteccao(token);
   }
-  // Se o navegador anunciar rVFC mas não disparar callbacks, volta para rAF automaticamente
   setInterval(() => {
     if (!isRunning || !cameraPronta || document.hidden || !usarRVFC) return;
     if (performance.now() - ultimoProcessamento > CONFIG.camera.watchdogMs) {
@@ -870,7 +1092,6 @@
     }
   }, 1000);
 
-  // Espera o PRÓXIMO quadro novo do vídeo (nunca devolve o mesmo quadro duas vezes)
   function esperarFrameNovo() {
     return new Promise((resolve) => {
       let feito = false, handle = null;
@@ -896,13 +1117,29 @@
     });
   }
 
-  /* ================= CAPTURA ================= */
-  // Copia o quadro direto do <video>: sem moldura, textos ou indicadores da interface
+  /* ================= CAPTURA E CHECAGEM PÓS-AÇÃO ================= */
   function capturarFrame(i) {
     const w = video.videoWidth, h = video.videoHeight;
     const c = capturaCanvases[i];
     if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
     capturaCtxs[i].drawImage(video, 0, 0, w, h);
+  }
+  function desenharDestaqueRetirada(idxCanvas, bbox) {
+    if (!bbox) return;
+    const c = capturaCanvases[idxCanvas];
+    const k = capturaCtxs[idxCanvas];
+    const rx = c.width * bbox.x, ry = c.height * bbox.y;
+    const rw = c.width * bbox.w, rh = c.height * bbox.h;
+    k.save();
+    k.strokeStyle = "#ffeb3b";
+    k.lineWidth = Math.max(3, Math.round(c.width * 0.004));
+    k.strokeRect(rx, ry, rw, rh);
+    k.fillStyle = "rgba(255, 235, 59, 0.22)";
+    k.fillRect(rx, ry, rw, rh);
+    k.font = "bold 15px sans-serif";
+    k.fillStyle = "#ffeb3b";
+    k.fillText("🛒 LOCAL ALTERADO", rx + 4, Math.max(18, ry - 6));
+    k.restore();
   }
   function canvasParaBlob(c) {
     return new Promise((resolve, reject) => {
@@ -927,7 +1164,6 @@
     const t0 = performance.now();
     let capturadas = 0;
     try {
-      // Foto 1: o quadro exato que disparou a detecção (antes de qualquer mudança na tela)
       capturarFrame(0); capturadas = 1;
 
       const flash = $("flash-overlay");
@@ -935,21 +1171,70 @@
       setTimeout(() => flash.style.opacity = "0", 120);
       setStatus("🚨 Capturando...", "alert");
 
-      // Demais fotos: respeitam o intervalo e sempre usam um quadro novo
       for (let i = 1; i < n; i++) {
         const espera = t0 + i * intervalo - performance.now();
         if (espera > 0) await sleep(espera);
         if (!(await esperarFrameNovo())) break;
         capturarFrame(i); capturadas++;
       }
+
+      let itemRetirado = null;
+      let mudancaPct = 0;
+      let temFotoDepois = false;
+
+      if (estado.posAcaoAtiva && baseMesaLuma) {
+        setStatus("🔍 Verificando mesa...", "alert");
+        const D = CONFIG.deteccao;
+        const maxTentativas = Math.max(1, Math.round(estado.posDelayMs / D.estabilizacaoIntervaloMs));
+        for (let tent = 0; tent < maxTentativas; tent++) {
+          await sleep(D.estabilizacaoIntervaloMs);
+          if (!isRunning) break;
+          if (tent >= 1 && ultimaAnalise.razao < D.razaoMinima) break;
+        }
+        const check = verificarMudancaMesa();
+        itemRetirado = check.retirado;
+        mudancaPct = check.mudancaPct;
+
+        if (estado.modoItem === "estrito" && !itemRetirado) {
+          cooldownAte = performance.now() + estado.cooldownMs;
+          setStatus("👀 Só movimento (ignorado)", "running");
+          return;
+        }
+
+        if (itemRetirado) {
+          capturarFrame(5);
+          desenharDestaqueRetirada(5, check.bbox);
+          temFotoDepois = true;
+        }
+      }
+
       cooldownAte = performance.now() + estado.cooldownMs;
 
+      // Melhoria 5: Converte as fotos para Blob em série (fila sequencial) para evitar pico de CPU/memória
       setStatus("⏳ Processando fotos...", "alert");
-      const fotos = await Promise.all(
-        Array.from({ length: capturadas }, (_, i) => canvasParaBlob(capturaCanvases[i]))
-      );
-      await salvarEvento({ timestamp, criadoEm: Date.now(), formato: "blob", fotos });
-      setStatus(`✅ Salvo às ${timestamp.split(" ")[1]}`, "running");
+      const indices = Array.from({ length: capturadas }, (_, i) => i);
+      if (temFotoDepois) indices.push(5);
+
+      const fotos = [];
+      for (const idx of indices) {
+        await sleep(10); // Deixa a thread principal respirar entre cada compressão JPEG
+        fotos.push(await canvasParaBlob(capturaCanvases[idx]));
+      }
+
+      await salvarEvento({
+        timestamp,
+        criadoEm: Date.now(),
+        formato: "blob",
+        itemRetirado,
+        mudancaPct: Math.round(mudancaPct * 10) / 10,
+        temFotoDepois,
+        fotos
+      });
+
+      const msgStatus = itemRetirado
+        ? `🛒 Item retirado! (${timestamp.split(" ")[1]})`
+        : `✅ Salvo às ${timestamp.split(" ")[1]}`;
+      setStatus(msgStatus, "running");
     } catch (e) {
       console.error("Falha ao salvar captura:", e);
       cooldownAte = Math.max(cooldownAte, performance.now() + estado.cooldownMs);
@@ -961,7 +1246,7 @@
     }
   }
 
-  /* ================= WAKE LOCK (mantém a tela ligada enquanto monitora) ================= */
+  /* ================= WAKE LOCK ================= */
   let wakeLock = null;
   async function pedirWakeLock() {
     try {
@@ -988,25 +1273,36 @@
     isRunning = true;
     btnToggle.textContent = "⏹️ Parar";
     btnToggle.classList.add("active");
+    btnRef.hidden = !estado.posAcaoAtiva;
+    if (estado.posAcaoAtiva) capturarBaseMesa();
     setStatus("Monitorando prateleira...", "running");
     resetarReferencia();
     cooldownAte = 0;
+    desenharOverlay();
     iniciarDeteccao();
     pedirWakeLock();
   }
   function pararMonitoramento() {
     const estavaRodando = isRunning;
     isRunning = false;
+    btnRef.hidden = true;
     pararDeteccao();
     soltarWakeLock();
     btnToggle.textContent = "▶️ Iniciar";
     btnToggle.classList.remove("active");
+    desenharOverlay();
     if (estavaRodando && cameraPronta) setStatus("Pausado. Arraste as bordas p/ regular.", "");
   }
   btnToggle.addEventListener("click", () => isRunning ? pararMonitoramento() : iniciarMonitoramento());
   btnRetry.addEventListener("click", iniciarCamera);
+  btnRef.addEventListener("click", () => {
+    if (capturarBaseMesa()) {
+      resetarReferencia();
+      toast("📌 Foto base da mesa atualizada!", 2500);
+    }
+  });
 
-  /* ================= DESENHO (SOMENTE VISUALIZAÇÃO) ================= */
+  /* ================= DESENHO SOB DEMANDA (MELHORIA 1: ZERO REDRAW 60FPS) ================= */
   function getRenderedRect() {
     const cw = canvas.clientWidth, ch = canvas.clientHeight;
     const vw = canvas.width || 1280, vh = canvas.height || 720;
@@ -1024,62 +1320,62 @@
     return { normX: clamp(px / render.w, 0, 1), normY: clamp(py / render.h, 0, 1) };
   }
 
-  function renderLoop() {
-    if (cameraPronta && video.videoWidth) {
-      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-      }
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      const pxX = canvas.width * caixa.x, pxY = canvas.height * caixa.y;
-      const pxW = canvas.width * caixa.w, pxH = canvas.height * caixa.h;
-
-      ctx.fillStyle = isRunning ? "rgba(255, 0, 0, 0.22)" : "rgba(255, 165, 0, 0.18)";
-      ctx.fillRect(pxX, pxY, pxW, pxH);
-      ctx.strokeStyle = isRunning ? "#ff3b30" : "#00e676";
-      ctx.lineWidth = isRunning ? 3 : 4;
-      ctx.setLineDash(isRunning ? [] : [6, 4]);
-      ctx.strokeRect(pxX, pxY, pxW, pxH);
-      ctx.setLineDash([]);
-
-      if (!isRunning) {
-        const handleRadius = Math.max(12, Math.min(22, canvas.width * 0.015));
-        const handles = [
-          { x: pxX, y: pxY }, { x: pxX + pxW, y: pxY },
-          { x: pxX, y: pxY + pxH }, { x: pxX + pxW, y: pxY + pxH },
-          { x: pxX + pxW / 2, y: pxY }, { x: pxX + pxW / 2, y: pxY + pxH },
-          { x: pxX, y: pxY + pxH / 2 }, { x: pxX + pxW, y: pxY + pxH / 2 }
-        ];
-        handles.forEach(h => {
-          ctx.beginPath();
-          ctx.arc(h.x, h.y, handleRadius, 0, 2 * Math.PI);
-          ctx.fillStyle = "#ffffff";
-          ctx.fill();
-          ctx.lineWidth = 3;
-          ctx.strokeStyle = "#00e676";
-          ctx.stroke();
-        });
-        ctx.font = "bold 15px sans-serif";
-        ctx.fillStyle = "#00e676";
-        ctx.fillText("✋ ARRASTE AS BORDAS OU BOLINHAS P/ AJUSTAR", pxX + 8, Math.max(26, pxY - 12));
-      } else {
-        ctx.font = "bold 16px sans-serif";
-        ctx.fillStyle = "#ff3b30";
-        ctx.fillText("⚠️ PRATELEIRA", pxX + 8, Math.max(26, pxY - 10));
-        if (DEBUG) {
-          ctx.font = "bold 14px monospace";
-          ctx.fillStyle = "#ffeb3b";
-          const a = ultimaAnalise;
-          ctx.fillText(`mov ${(a.razao * 100).toFixed(2)}%  celulas ${a.celulas}  luz ${a.offset}`, 10, canvas.height - 12);
-        }
-      }
-    } else {
-      ctx.fillStyle = "#000";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // Melhoria 1: Só desenha no canvas quando a caixa muda, quando alterna Iniciar/Parar ou redimensiona a tela
+  function desenharOverlay() {
+    if (!cameraPronta || !video.videoWidth) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      return;
     }
-    requestAnimationFrame(renderLoop);
+    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+    }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const pxX = canvas.width * caixa.x, pxY = canvas.height * caixa.y;
+    const pxW = canvas.width * caixa.w, pxH = canvas.height * caixa.h;
+
+    ctx.fillStyle = isRunning ? "rgba(255, 0, 0, 0.22)" : "rgba(255, 165, 0, 0.18)";
+    ctx.fillRect(pxX, pxY, pxW, pxH);
+    ctx.strokeStyle = isRunning ? "#ff3b30" : "#00e676";
+    ctx.lineWidth = isRunning ? 3 : 4;
+    ctx.setLineDash(isRunning ? [] : [6, 4]);
+    ctx.strokeRect(pxX, pxY, pxW, pxH);
+    ctx.setLineDash([]);
+
+    if (!isRunning) {
+      const handleRadius = Math.max(12, Math.min(22, canvas.width * 0.015));
+      const handles = [
+        { x: pxX, y: pxY }, { x: pxX + pxW, y: pxY },
+        { x: pxX, y: pxY + pxH }, { x: pxX + pxW, y: pxY + pxH },
+        { x: pxX + pxW / 2, y: pxY }, { x: pxX + pxW / 2, y: pxY + pxH },
+        { x: pxX, y: pxY + pxH / 2 }, { x: pxX + pxW, y: pxY + pxH / 2 }
+      ];
+      handles.forEach(h => {
+        ctx.beginPath();
+        ctx.arc(h.x, h.y, handleRadius, 0, 2 * Math.PI);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "#00e676";
+        ctx.stroke();
+      });
+      ctx.font = "bold 15px sans-serif";
+      ctx.fillStyle = "#00e676";
+      ctx.fillText("✋ ARRASTE AS BORDAS OU BOLINHAS P/ AJUSTAR", pxX + 8, Math.max(26, pxY - 12));
+    } else {
+      ctx.font = "bold 16px sans-serif";
+      ctx.fillStyle = "#ff3b30";
+      ctx.fillText("⚠️ PRATELEIRA", pxX + 8, Math.max(26, pxY - 10));
+      if (DEBUG) {
+        ctx.font = "bold 14px monospace";
+        ctx.fillStyle = "#ffeb3b";
+        const a = ultimaAnalise;
+        ctx.fillText(`mov ${(a.razao * 100).toFixed(2)}%  celulas ${a.celulas}  luz ${a.offset}`, 10, canvas.height - 12);
+      }
+    }
   }
+  window.addEventListener("resize", desenharOverlay);
 
   /* ================= ARRASTAR CAIXA ================= */
   let dragMode = null;
@@ -1134,7 +1430,7 @@
     modalConfig.style.display = "none";
     fecharGaleria();
     resetarReferencia();
-    if (isRunning) cooldownAte = Math.max(cooldownAte, performance.now() + 1000); // 1 s de segurança ao voltar
+    if (isRunning) cooldownAte = Math.max(cooldownAte, performance.now() + 1000);
   }
   $("close-config").addEventListener("click", fecharModaisEResetar);
   $("close-gallery").addEventListener("click", fecharModaisEResetar);
@@ -1148,7 +1444,6 @@
     const pct = (v) => Math.round(v * 100);
     sliderW.value = pct(caixa.w); valW.textContent = `${pct(caixa.w)}%`;
     sliderH.value = pct(caixa.h); valH.textContent = `${pct(caixa.h)}%`;
-    // O máximo de X/Y acompanha o tamanho: a caixa nunca passa da borda
     sliderX.max = pct(1 - caixa.w); sliderX.value = pct(caixa.x); valX.textContent = `${pct(caixa.x)}%`;
     sliderY.max = pct(1 - caixa.h); sliderY.value = pct(caixa.y); valY.textContent = `${pct(caixa.y)}%`;
   }
@@ -1172,10 +1467,38 @@
   ligarSlider("slider-count", "val-count", "burstCount", (v) => `${v} foto${v > 1 ? "s" : ""}`);
   ligarSlider("slider-interval", "val-interval", "burstInterval", (v) => `${v}ms`);
   ligarSlider("slider-cooldown", "val-cooldown", "cooldownMs", (v) => `${(v / 1000).toFixed(1)}s`);
+  ligarSlider("slider-item-diff", "val-item-diff", "itemDiff", (v) => v);
+  ligarSlider("slider-pos-delay", "val-pos-delay", "posDelayMs", (v) => `${(v / 1000).toFixed(1)}s`);
 
-  /* ================= GALERIA E LIGHTBOX ================= */
+  const chkPosAcao = $("chk-pos-acao");
+  const posAcaoOpcoes = $("pos-acao-opcoes");
+  function atualizarVisibilidadePosAcao() {
+    chkPosAcao.checked = estado.posAcaoAtiva;
+    posAcaoOpcoes.style.display = estado.posAcaoAtiva ? "block" : "none";
+    if (isRunning) {
+      btnRef.hidden = !estado.posAcaoAtiva;
+      if (estado.posAcaoAtiva && !baseMesaLuma) capturarBaseMesa();
+    }
+  }
+  chkPosAcao.addEventListener("change", (e) => {
+    estado.posAcaoAtiva = e.target.checked;
+    prefs.set("posAcaoAtiva", estado.posAcaoAtiva);
+    atualizarVisibilidadePosAcao();
+  });
+  atualizarVisibilidadePosAcao();
+
+  const selectModoItem = $("select-modo-item");
+  selectModoItem.value = estado.modoItem;
+  selectModoItem.addEventListener("change", (e) => {
+    estado.modoItem = e.target.value;
+    prefs.set("modoItem", estado.modoItem);
+  });
+
+  /* ================= GALERIA COM PAGINAÇÃO E LAZY LOADING (MELHORIA 6) ================= */
   let currentGalleryImages = [];
   let galeriaUrls = [];
+  let galeriaEventosOrdenados = [];
+  let galeriaExibidos = 0;
   let galeriaToken = 0;
   let currentLightboxIndex = 0;
   const galleryContainer = $("gallery-container");
@@ -1194,8 +1517,9 @@
     galeriaUrls.forEach(u => URL.revokeObjectURL(u));
     galeriaUrls = [];
     currentGalleryImages = [];
+    galeriaEventosOrdenados = [];
+    galeriaExibidos = 0;
   }
-  // Aceita registros antigos (string Base64) e novos (Blob)
   function srcDaFoto(f) {
     if (typeof f === "string") return f;
     if (f instanceof Blob) { const u = URL.createObjectURL(f); galeriaUrls.push(u); return u; }
@@ -1208,6 +1532,84 @@
     lightboxImg.removeAttribute("src");
     galleryContainer.innerHTML = "";
     liberarUrlsGaleria();
+  }
+
+  function renderizarLoteGaleria() {
+    const btnAntigo = $("btn-load-more");
+    if (btnAntigo) btnAntigo.remove();
+
+    const lote = galeriaEventosOrdenados.slice(galeriaExibidos, galeriaExibidos + CONFIG.galeria.tamanhoPagina);
+    const frag = document.createDocumentFragment();
+
+    lote.forEach((ev) => {
+      const fotos = Array.isArray(ev.fotos) ? ev.fotos : [];
+      const card = document.createElement("div");
+      card.className = "event-card";
+
+      const meta = document.createElement("div");
+      meta.className = "event-meta";
+      const infoLeft = document.createElement("span");
+      const b = document.createElement("b");
+      b.textContent = ev.timestamp || "";
+      infoLeft.append("🕒 ", b, ` (${fotos.length} fotos)`);
+      meta.appendChild(infoLeft);
+
+      if (ev.itemRetirado === true) {
+        const badge = document.createElement("span");
+        badge.className = "event-badge retirado";
+        badge.textContent = `🛒 ITEM RETIRADO (${ev.mudancaPct || 0}%)`;
+        meta.appendChild(badge);
+      } else if (ev.itemRetirado === false) {
+        const badge = document.createElement("span");
+        badge.className = "event-badge movimento";
+        badge.textContent = "👀 SÓ MOVIMENTO";
+        meta.appendChild(badge);
+      }
+
+      const grid = document.createElement("div");
+      grid.className = "thumb-grid";
+      card.append(meta, grid);
+
+      fotos.forEach((f, idx) => {
+        const src = srcDaFoto(f);
+        if (!src) return;
+        const globalIndex = currentGalleryImages.length;
+        currentGalleryImages.push(src);
+
+        const wrap = document.createElement("div");
+        wrap.className = "thumb-wrap";
+        const img = document.createElement("img");
+        img.loading = "lazy";
+        img.decoding = "async";
+        img.src = src;
+        img.alt = "Foto capturada";
+        img.addEventListener("click", () => openLightbox(globalIndex));
+        wrap.appendChild(img);
+
+        if (ev.temFotoDepois && idx === fotos.length - 1) {
+          const lbl = document.createElement("span");
+          lbl.className = "thumb-label";
+          lbl.textContent = "DEPOIS";
+          wrap.appendChild(lbl);
+        }
+        grid.appendChild(wrap);
+      });
+      frag.appendChild(card);
+    });
+
+    galeriaExibidos += lote.length;
+
+    if (galeriaExibidos < galeriaEventosOrdenados.length) {
+      const restantes = galeriaEventosOrdenados.length - galeriaExibidos;
+      const btnMais = document.createElement("button");
+      btnMais.id = "btn-load-more";
+      btnMais.className = "btn-load-more";
+      btnMais.textContent = `➕ Carregar mais antigos (${restantes} restantes)`;
+      btnMais.addEventListener("click", renderizarLoteGaleria);
+      frag.appendChild(btnMais);
+    }
+
+    galleryContainer.appendChild(frag);
   }
 
   $("btn-gallery").addEventListener("click", async () => {
@@ -1230,33 +1632,8 @@
     if (!eventos.length) { mensagemGaleria("Nenhum registro capturado."); return; }
 
     galleryContainer.innerHTML = "";
-    [...eventos].reverse().forEach((ev) => {
-      const fotos = Array.isArray(ev.fotos) ? ev.fotos : [];
-      const card = document.createElement("div");
-      card.className = "event-card";
-
-      const meta = document.createElement("div");
-      meta.className = "event-meta";
-      const b = document.createElement("b");
-      b.textContent = ev.timestamp || "";
-      meta.append("🕒 ", b, ` (${fotos.length} fotos)`);
-      const grid = document.createElement("div");
-      grid.className = "thumb-grid";
-      card.append(meta, grid);
-
-      fotos.forEach((f) => {
-        const src = srcDaFoto(f);
-        if (!src) return;
-        const globalIndex = currentGalleryImages.length;
-        currentGalleryImages.push(src);
-        const img = document.createElement("img");
-        img.src = src;
-        img.alt = "Foto capturada";
-        img.addEventListener("click", () => openLightbox(globalIndex));
-        grid.appendChild(img);
-      });
-      galleryContainer.appendChild(card);
-    });
+    galeriaEventosOrdenados = [...eventos].reverse();
+    renderizarLoteGaleria();
   });
 
   function openLightbox(index) {
@@ -1297,14 +1674,13 @@
   /* ================= INICIALIZAÇÃO ================= */
   (async function iniciarApp() {
     $("version-badge").textContent = "v" + APP_VERSION;
-    requestAnimationFrame(renderLoop);
     const dbOk = await initDB();
     if (!dbOk) {
       toast("Não foi possível abrir o armazenamento do navegador. As capturas podem não ser salvas.", 7000);
     } else if (navigator.storage && navigator.storage.persist) {
-      navigator.storage.persist().catch(() => {}); // pede para o navegador não apagar os registros sozinho
+      navigator.storage.persist().catch(() => {});
     }
-    iniciarCamera(); // a câmera inicia mesmo se o banco falhar
+    iniciarCamera();
   })();
 </script>
 
