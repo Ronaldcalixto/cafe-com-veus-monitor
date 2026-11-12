@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="ShelfGuard" />
-  <title>ShelfGuard Monitor — v2.0.0</title>
+  <title>ShelfGuard Monitor — v2.1.0</title>
   <style>
     :root {
       --bg: #000000;
@@ -42,7 +42,6 @@
       user-select: none;
     }
 
-    /* Stage principal em tela cheia */
     #app {
       position: relative;
       width: 100vw;
@@ -54,7 +53,6 @@
       overflow: hidden;
     }
 
-    /* Vídeo renderizado nativamente pela GPU sem distorção */
     #cameraVideo {
       width: 100%;
       height: 100%;
@@ -63,14 +61,12 @@
       display: block;
     }
 
-    /* Overlay interativo alinhado exatamente sobre a área útil do vídeo */
     #overlayStage {
       position: absolute;
       pointer-events: none;
       z-index: 10;
     }
 
-    /* Caixa de monitoramento */
     #roiBox {
       position: absolute;
       pointer-events: auto;
@@ -124,7 +120,6 @@
       display: none;
     }
 
-    /* Pontos de redimensionamento (8 handles) e bordas */
     .resize-handle {
       position: absolute;
       width: 18px;
@@ -150,7 +145,6 @@
     .handle-sw { bottom: -9px; left: -9px; cursor: nesw-resize; }
     .handle-w  { top: calc(50% - 9px); left: -9px; cursor: ew-resize; }
 
-    /* Áreas invisíveis nas 4 bordas para facilitar arrasto por toque */
     .resize-edge {
       position: absolute;
       z-index: 11;
@@ -161,7 +155,6 @@
     .edge-e { right: -8px; top: 10px; bottom: 10px; width: 16px; cursor: ew-resize; }
     .edge-w { left: -8px; top: 10px; bottom: 10px; width: 16px; cursor: ew-resize; }
 
-    /* Flash discreto de captura */
     #captureFlash {
       position: fixed;
       inset: 0;
@@ -176,7 +169,6 @@
       transition: none;
     }
 
-    /* Barra superior de status */
     #topBar {
       position: fixed;
       top: calc(10px + var(--safe-top));
@@ -203,8 +195,7 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      background: rgba(12, 14, 18, 0.82);
-      backdrop-filter: blur(8px);
+      background: rgba(12, 14, 18, 0.85);
       border: 1px solid var(--border);
       padding: 6px 10px;
       border-radius: 999px;
@@ -228,7 +219,6 @@
       50% { opacity: 0.35; }
     }
 
-    /* Banner de erro ou alerta */
     #alertBanner {
       position: fixed;
       top: calc(56px + var(--safe-top));
@@ -248,7 +238,6 @@
       display: none;
     }
 
-    /* Controles inferiores + Rodapé */
     #bottomDock {
       position: fixed;
       bottom: calc(8px + var(--safe-bottom));
@@ -267,8 +256,7 @@
       flex-wrap: wrap;
       justify-content: center;
       gap: 8px;
-      background: rgba(14, 16, 20, 0.85);
-      backdrop-filter: blur(10px);
+      background: rgba(14, 16, 20, 0.88);
       border: 1px solid var(--border);
       padding: 8px;
       border-radius: 16px;
@@ -331,12 +319,10 @@
       gap: 8px;
     }
 
-    /* Modais (Ajustes & Galeria) */
     .modal-backdrop {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.86);
-      backdrop-filter: blur(6px);
+      background: rgba(0, 0, 0, 0.90);
       z-index: 50;
       display: none;
       align-items: center;
@@ -421,6 +407,7 @@
       justify-content: space-between;
       align-items: center;
       font-size: 13px;
+      gap: 8px;
     }
 
     .control-val {
@@ -430,6 +417,7 @@
       padding: 2px 8px;
       border-radius: 6px;
       font-variant-numeric: tabular-nums;
+      white-space: nowrap;
     }
 
     input[type="range"] {
@@ -464,7 +452,6 @@
       .btn { padding: 9px 11px; font-size: 12px; }
     }
 
-    /* Galeria */
     .event-card {
       border: 1px solid var(--border);
       border-radius: 12px;
@@ -541,7 +528,6 @@
       color: #000;
     }
 
-    /* Lightbox */
     #lightboxModal {
       position: fixed;
       inset: 0;
@@ -590,7 +576,6 @@
   <div id="app">
     <video id="cameraVideo" autoplay muted playsinline></video>
 
-    <!-- Overlay alinhado ao retângulo renderizado do vídeo -->
     <div id="overlayStage">
       <div id="roiBox">
         <div id="roiLabel">Área Monitorada</div>
@@ -612,7 +597,6 @@
 
     <div id="captureFlash"></div>
 
-    <!-- Status Superior -->
     <header id="topBar">
       <div class="status-group">
         <div class="badge" id="camStatusBadge">
@@ -625,7 +609,7 @@
         </div>
       </div>
       <div class="status-group">
-        <div class="badge" id="workerStatusBadge" title="Processamento paralelo via Web Worker">
+        <div class="badge" id="workerStatusBadge">
           <span id="engineStatusText">Worker: Ativo</span>
         </div>
         <div class="badge" id="baseStatusBadge">
@@ -636,7 +620,6 @@
 
     <div id="alertBanner" role="alert"></div>
 
-    <!-- Barra Inferior e Versão -->
     <footer id="bottomDock">
       <div class="controls-row">
         <button class="btn" id="btnCamera" title="Reiniciar câmera">Câmera</button>
@@ -647,7 +630,7 @@
         <button class="btn btn-accent" id="btnInstallPwa" style="display:none;" title="Instalar aplicativo offline">Instalar App</button>
       </div>
       <div id="footerVersion">
-        <span>ShelfGuard Monitor • v2.0.0 PWA</span>
+        <span>ShelfGuard Monitor • v2.1.0 PWA</span>
         <span id="offlineBadge">• Offline Ready</span>
       </div>
     </footer>
@@ -683,9 +666,9 @@
           <div class="control-row">
             <div class="control-row-header">
               <label for="cfgSensitivity">Sensibilidade ao movimento</label>
-              <span class="control-val" id="valSensitivity">28</span>
+              <span class="control-val" id="valSensitivity">25</span>
             </div>
-            <input type="range" id="cfgSensitivity" min="10" max="80" step="1" value="28" />
+            <input type="range" id="cfgSensitivity" min="10" max="80" step="1" value="25" />
           </div>
         </div>
 
@@ -694,6 +677,14 @@
           <div class="control-row-header">
             <label for="cfgPostCheck">Ativar verificação pós-ação</label>
             <input type="checkbox" id="cfgPostCheck" checked style="width:20px;height:20px;" />
+          </div>
+          <div class="control-row-header">
+            <label for="cfgAutoRebase">Atualizar Base automaticamente após retirada</label>
+            <input type="checkbox" id="cfgAutoRebase" checked style="width:20px;height:20px;" />
+          </div>
+          <div class="control-row-header">
+            <label for="cfgPerspectiveBoost">Compensar perspectiva (itens no fundo da mesa)</label>
+            <input type="checkbox" id="cfgPerspectiveBoost" checked style="width:20px;height:20px;" />
           </div>
           <div class="control-row">
             <label for="cfgMode">Modo de identificação</label>
@@ -704,17 +695,17 @@
           </div>
           <div class="control-row">
             <div class="control-row-header">
-              <label for="cfgDiffThreshold">Limiar de alteração do produto (%)</label>
-              <span class="control-val" id="valDiffThreshold">22%</span>
+              <label for="cfgDiffThreshold">Sensibilidade de retirada (% área/célula)</label>
+              <span class="control-val" id="valDiffThreshold">8%</span>
             </div>
-            <input type="range" id="cfgDiffThreshold" min="10" max="60" step="1" value="22" />
+            <input type="range" id="cfgDiffThreshold" min="3" max="50" step="1" value="8" />
           </div>
           <div class="control-row">
             <div class="control-row-header">
               <label for="cfgHandWait">Tempo de espera para saída da mão (ms)</label>
-              <span class="control-val" id="valHandWait">2000 ms</span>
+              <span class="control-val" id="valHandWait">2200 ms</span>
             </div>
-            <input type="range" id="cfgHandWait" min="500" max="4000" step="100" value="2000" />
+            <input type="range" id="cfgHandWait" min="500" max="4000" step="100" value="2200" />
           </div>
         </div>
 
@@ -749,23 +740,23 @@
             <div class="control-row">
               <div class="control-row-header">
                 <label for="cfgRoiW">Largura</label>
-                <span class="control-val" id="valRoiW">60%</span>
+                <span class="control-val" id="valRoiW">70%</span>
               </div>
-              <input type="range" id="cfgRoiW" min="10" max="100" step="1" value="60" />
+              <input type="range" id="cfgRoiW" min="10" max="100" step="1" value="70" />
             </div>
             <div class="control-row">
               <div class="control-row-header">
                 <label for="cfgRoiH">Altura</label>
-                <span class="control-val" id="valRoiH">55%</span>
+                <span class="control-val" id="valRoiH">68%</span>
               </div>
-              <input type="range" id="cfgRoiH" min="10" max="100" step="1" value="55" />
+              <input type="range" id="cfgRoiH" min="10" max="100" step="1" value="68" />
             </div>
             <div class="control-row">
               <div class="control-row-header">
                 <label for="cfgRoiX">Posição X</label>
-                <span class="control-val" id="valRoiX">20%</span>
+                <span class="control-val" id="valRoiX">15%</span>
               </div>
-              <input type="range" id="cfgRoiX" min="0" max="90" step="1" value="20" />
+              <input type="range" id="cfgRoiX" min="0" max="90" step="1" value="15" />
             </div>
             <div class="control-row">
               <div class="control-row-header">
@@ -818,29 +809,16 @@
   </div>
 
   <script>
-    /**
-     * ============================================================================
-     * INSTRUÇÕES DE INSTALAÇÃO E EXECUÇÃO (PWA + OFFLINE)
-     * ============================================================================
-     * 1. Salve este código como `index.html`.
-     * 2. Execute em HTTPS ou `http://localhost` (ex.: `npx serve .` ou
-     *    `python -m http.server 8080`).
-     * 3. O app registra automaticamente o Manifest PWA e o Service Worker
-     *    para funcionar 100% offline e pode ser instalado via botão "Instalar App"
-     *    ou menu "Adicionar à tela inicial" do navegador.
-     * ============================================================================
-     */
-
     (() => {
       'use strict';
 
-      const APP_VERSION = '2.0.0';
-      const STORAGE_KEY = 'shelfguard_config_v2';
+      const APP_VERSION = '2.1.0';
+      const STORAGE_KEY = 'shelfguard_config_v21';
       const JPEG_QUALITY = 0.82;
       const THUMB_QUALITY = 0.65;
 
       /* ========================================================================
-       * 0. MÓDULO PWA (Manifest Dinâmico + Service Worker Offline)
+       * 0. MÓDULO PWA
        * ======================================================================== */
       const PWAManager = {
         deferredPrompt: null,
@@ -888,53 +866,15 @@
             offlineBadge.textContent = '• Modo Local';
             return;
           }
-
-          // Código do Service Worker para cache Cache-First / Network-Fallback offline
-          const swCode = `
-            const CACHE_NAME = 'shelfguard-pwa-v${APP_VERSION}';
-            self.addEventListener('install', (event) => {
-              self.skipWaiting();
-              event.waitUntil(
-                caches.open(CACHE_NAME).then((cache) => cache.addAll(['./']).catch(() => {}))
-              );
-            });
-            self.addEventListener('activate', (event) => {
-              event.waitUntil(
-                caches.keys().then((keys) =>
-                  Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-                ).then(() => self.clients.claim())
-              );
-            });
-            self.addEventListener('fetch', (event) => {
-              if (event.request.method !== 'GET') return;
-              event.respondWith(
-                caches.match(event.request).then((cached) => {
-                  const networkFetch = fetch(event.request).then((res) => {
-                    if (res && res.status === 200 && res.type === 'basic') {
-                      const clone = res.clone();
-                      caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-                    }
-                    return res;
-                  }).catch(() => cached);
-                  return cached || networkFetch;
-                })
-              );
-            });
-          `;
-
           try {
-            // Tenta registrar arquivo sw.js se hospedado, ou fallback via Blob URL
-            const swBlob = new Blob([swCode], { type: 'application/javascript' });
-            const swUrl = URL.createObjectURL(swBlob);
-            await navigator.serviceWorker.register(swUrl);
+            await navigator.serviceWorker.register('./sw.js');
             offlineBadge.textContent = '• PWA Offline Ativo';
           } catch (_) {
-            // Fallback: Cache API direto da página atual para persistência offline
             if ('caches' in window) {
               try {
                 const cache = await caches.open(`shelfguard-pwa-v${APP_VERSION}`);
                 await cache.add(location.href);
-                offlineBadge.textContent = '• Cache Offline Ativo';
+                offlineBadge.textContent = '• Cache Local Ativo';
               } catch (e) {
                 offlineBadge.textContent = '• Pronto';
               }
@@ -954,9 +894,7 @@
             if (!this.deferredPrompt) return;
             this.deferredPrompt.prompt();
             const choice = await this.deferredPrompt.userChoice;
-            if (choice.outcome === 'accepted') {
-              btnInstall.style.display = 'none';
-            }
+            if (choice.outcome === 'accepted') btnInstall.style.display = 'none';
             this.deferredPrompt = null;
           });
 
@@ -972,16 +910,18 @@
        * ======================================================================== */
       const DEFAULT_CONFIG = {
         cameraDeviceId: '',
-        idleFps: 10,          // 5 a 30 FPS em vigília (economia de CPU)
-        sensitivity: 28,      // 10 a 80
+        idleFps: 10,
+        sensitivity: 25,
         postCheck: true,
-        mode: 'all',          // 'all' | 'strict'
-        diffThreshold: 22,    // 10 a 60 (%)
-        handWait: 2000,       // 500 a 4000 ms
-        burstCount: 3,        // 1 a 5
-        burstInterval: 80,    // 40 a 600 ms
-        cooldown: 1500,       // 500 a 5000 ms
-        roi: { x: 20, y: 22, w: 60, h: 55 }
+        autoRebase: true,         // Atualiza base automaticamente após retirada
+        perspectiveBoost: true,   // Compensa perspectiva (fundo da mesa menor)
+        mode: 'all',
+        diffThreshold: 8,         // 3% a 50% (calibrado para detecção local + global)
+        handWait: 2200,
+        burstCount: 3,
+        burstInterval: 80,
+        cooldown: 1500,
+        roi: { x: 15, y: 22, w: 70, h: 68 }
       };
 
       const ConfigStore = {
@@ -1029,7 +969,7 @@
       };
 
       /* ========================================================================
-       * 2. MÓDULO DE ARMAZENAMENTO (IndexedDB com Blobs Full + Miniaturas Leves)
+       * 2. MÓDULO DE ARMAZENAMENTO (IndexedDB)
        * ======================================================================== */
       const DBStore = {
         DB_NAME: 'ShelfGuardDB_v2',
@@ -1133,19 +1073,15 @@
       };
 
       /* ========================================================================
-       * 3. WEB WORKER DE VISÃO COMPUTACIONAL (Zero-Copy Ping-Pong + Uint32Array)
+       * 3. WEB WORKER DE VISÃO COMPUTACIONAL (Com Grade 6x6, Filtro Morfológico e Perspectiva)
        * ======================================================================== */
       const VisionEngine = {
         worker: null,
         hasBaseline: false,
         pendingResolve: null,
-        useFallbackMainThread: false,
 
-        // Canvas de extração rápida da ROI (max 160px para reduzir 55% dos pixels)
         roiCanvas: document.createElement('canvas'),
         roiCtx: null,
-
-        // Canvas dedicado para codificação JPEG assíncrona (pós-burst) e miniaturas
         encodeCanvas: document.createElement('canvas'),
         encodeCtx: null,
         thumbCanvas: document.createElement('canvas'),
@@ -1164,6 +1100,7 @@
             let currLuma = null;
             let baseLuma = null;
             let diffBuffer = null;
+            let maskBuffer = null;
             const histBuffer = new Int32Array(512);
 
             function ensureBuffers(pw, ph) {
@@ -1175,10 +1112,10 @@
                 baseLuma = null;
                 currLuma = new Uint8Array(len);
                 diffBuffer = new Int16Array(len);
+                maskBuffer = new Uint8Array(len);
               }
             }
 
-            // Leitura vetorizada via Uint32Array (4 canais RGBA por ciclo)
             function extractLumaFromRGBA(rgbaBuffer, len) {
               const pixels32 = new Uint32Array(rgbaBuffer);
               for (let i = 0; i < len; i++) {
@@ -1190,7 +1127,6 @@
               }
             }
 
-            // Mediana O(N) via histograma
             function computeMedianDiff(a, b, len) {
               histBuffer.fill(0);
               for (let i = 0; i < len; i++) {
@@ -1248,7 +1184,6 @@
 
                 const medianShift = computeMedianDiff(currLuma, prevLuma, len);
 
-                // Zero-Copy Ping-Pong swap de ponteiros O(1)
                 const tmp = prevLuma;
                 prevLuma = currLuma;
                 currLuma = tmp;
@@ -1293,11 +1228,18 @@
                 }
 
                 const totalRatio = totalChangedPixels / len;
-                const detected = activeCells >= 2 && totalRatio >= 0.015 && totalRatio <= 0.92;
+                const detected = activeCells >= 2 && totalRatio >= 0.012 && totalRatio <= 0.92;
                 self.postMessage({ id: msg.id, detected, activeCells, totalRatio });
                 return;
               }
 
+              /**
+               * AVALIAÇÃO APRIMORADA DE RETIRADA (v2.1.0):
+               * 1) Filtro morfológico 3x3 elimina ruído fino de borda (vibração de geladeira).
+               * 2) Peso por perspectiva vertical (topo da caixa vale até 1.8x mais).
+               * 3) Grade 6x6 detecta retirada concentrada em uma única sub-região da mesa.
+               * 4) Rebase automático opcional após retirada confirmada.
+               */
               if (msg.type === 'evaluateWithdrawal') {
                 if (!baseLuma || baseLuma.length !== len) {
                   self.postMessage({ id: msg.id, hasBaseline: false, isWithdrawal: false, changePercent: 0, box: null });
@@ -1305,40 +1247,101 @@
                 }
 
                 const medianShift = computeMedianDiff(currLuma, baseLuma, len);
-                const pixelDiffThreshold = 26;
-                let changedCount = 0;
+                const pixelDiffThreshold = 22;
+
+                // Passo 1: Máscara binária inicial
+                maskBuffer.fill(0);
+                for (let i = 0; i < len; i++) {
+                  if (Math.abs(diffBuffer[i] - medianShift) > pixelDiffThreshold) {
+                    maskBuffer[i] = 1;
+                  }
+                }
+
+                // Passo 2: Filtro morfológico (exige >= 2 vizinhos ativos para evitar ruído de vibração)
+                let weightedChanged = 0;
+                let totalWeight = 0;
                 const colHits = new Uint16Array(pw);
                 const rowHits = new Uint16Array(ph);
 
-                for (let y = 0; y < ph; y++) {
+                for (let y = 1; y < ph - 1; y++) {
                   const rowOffset = y * pw;
-                  for (let x = 0; x < pw; x++) {
+                  // Fator de perspectiva: topo (y=0) tem peso 1.8, base (y=ph) tem peso 1.0
+                  const yNorm = y / ph;
+                  const perspWeight = msg.perspectiveBoost ? (1.8 - 0.8 * yNorm) : 1.0;
+
+                  for (let x = 1; x < pw - 1; x++) {
                     const idx = rowOffset + x;
-                    if (Math.abs(diffBuffer[idx] - medianShift) > pixelDiffThreshold) {
-                      changedCount++;
-                      colHits[x]++;
-                      rowHits[y]++;
+                    totalWeight += perspWeight;
+
+                    if (maskBuffer[idx] === 1) {
+                      const neighbors =
+                        maskBuffer[idx - 1] + maskBuffer[idx + 1] +
+                        maskBuffer[idx - pw] + maskBuffer[idx + pw];
+
+                      if (neighbors >= 2) {
+                        weightedChanged += perspWeight;
+                        colHits[x]++;
+                        rowHits[y]++;
+                      } else {
+                        maskBuffer[idx] = 0; // Remove pixel isolado
+                      }
                     }
                   }
                 }
 
-                const changePercent = Number(((changedCount / len) * 100).toFixed(1));
-                const isWithdrawal = changePercent >= msg.diffThreshold;
+                const globalChangePct = totalWeight > 0 ? (weightedChanged / totalWeight) * 100 : 0;
+
+                // Passo 3: Análise por célula 6x6 para capturar itens pequenos retirados em mesas longas
+                const gCols = 6;
+                const gRows = 6;
+                let maxCellPct = 0;
+                let bestCell = null;
+
+                for (let gy = 0; gy < gRows; gy++) {
+                  const y0 = Math.max(1, Math.floor((gy * ph) / gRows));
+                  const y1 = Math.min(ph - 1, Math.floor(((gy + 1) * ph) / gRows));
+                  for (let gx = 0; gx < gCols; gx++) {
+                    const x0 = Math.max(1, Math.floor((gx * pw) / gCols));
+                    const x1 = Math.min(pw - 1, Math.floor(((gx + 1) * pw) / gCols));
+
+                    let cellHits = 0;
+                    let cellPixels = 0;
+                    for (let y = y0; y < y1; y++) {
+                      const rOff = y * pw;
+                      for (let x = x0; x < x1; x++) {
+                        cellHits += maskBuffer[rOff + x];
+                        cellPixels++;
+                      }
+                    }
+
+                    if (cellPixels > 0) {
+                      const cellPct = (cellHits / cellPixels) * 100;
+                      if (cellPct > maxCellPct) {
+                        maxCellPct = cellPct;
+                        bestCell = { x0, y0, x1, y1 };
+                      }
+                    }
+                  }
+                }
+
+                // Considera retirada se a área global atingir o limiar OU se uma célula local tiver >= (limiar * 2.4)%
+                const localThreshold = Math.min(55, msg.diffThreshold * 2.4);
+                const isWithdrawal = (globalChangePct >= msg.diffThreshold || maxCellPct >= localThreshold) && globalChangePct <= 90;
+                const reportedPercent = Number(Math.max(globalChangePct, maxCellPct * 0.45).toFixed(1));
+
                 let box = null;
-
-                if (isWithdrawal && changedCount > 0) {
+                if (isWithdrawal) {
                   let minX = pw, minY = ph, maxX = 0, maxY = 0;
-                  const minColSupport = Math.max(2, Math.floor(ph * 0.05));
-                  const minRowSupport = Math.max(2, Math.floor(pw * 0.05));
+                  const minSupport = 2;
 
-                  for (let x = 0; x < pw; x++) {
-                    if (colHits[x] >= minColSupport) {
+                  for (let x = 1; x < pw - 1; x++) {
+                    if (colHits[x] >= minSupport) {
                       if (x < minX) minX = x;
                       if (x > maxX) maxX = x;
                     }
                   }
-                  for (let y = 0; y < ph; y++) {
-                    if (rowHits[y] >= minRowSupport) {
+                  for (let y = 1; y < ph - 1; y++) {
+                    if (rowHits[y] >= minSupport) {
                       if (y < minY) minY = y;
                       if (y > maxY) maxY = y;
                     }
@@ -1351,10 +1354,28 @@
                       rw: (maxX - minX) / pw,
                       rh: (maxY - minY) / ph
                     };
+                  } else if (bestCell) {
+                    box = {
+                      rx: bestCell.x0 / pw,
+                      ry: bestCell.y0 / ph,
+                      rw: (bestCell.x1 - bestCell.x0) / pw,
+                      rh: (bestCell.y1 - bestCell.y0) / ph
+                    };
+                  }
+
+                  // Passo 4: Rebase automático para que o próximo cliente seja avaliado isoladamente
+                  if (msg.autoRebase) {
+                    baseLuma.set(currLuma);
                   }
                 }
 
-                self.postMessage({ id: msg.id, hasBaseline: true, isWithdrawal, changePercent, box });
+                self.postMessage({
+                  id: msg.id,
+                  hasBaseline: true,
+                  isWithdrawal,
+                  changePercent: reportedPercent,
+                  box
+                });
               }
             };
           `;
@@ -1371,8 +1392,7 @@
             };
             document.getElementById('engineStatusText').textContent = 'Worker: Ativo';
           } catch (err) {
-            console.warn('Web Worker indisponível, usando fallback:', err);
-            this.useFallbackMainThread = true;
+            console.warn('Web Worker indisponível:', err);
             document.getElementById('engineStatusText').textContent = 'Engine: Local';
           }
         },
@@ -1387,15 +1407,12 @@
           return { sx, sy, sw, sh, vw, vh };
         },
 
-        /**
-         * Extrai recorte reduzido (max 160px) da ROI para envio zero-copy ao Worker
-         */
         extractRoiBuffer(video, roi) {
           const { sx, sy, sw, sh } = this.getRoiVideoRect(video, roi);
-          const maxDim = 160;
+          const maxDim = 180;
           const scale = Math.min(1, maxDim / Math.max(sw, sh));
-          const pw = Math.max(20, Math.round(sw * scale));
-          const ph = Math.max(20, Math.round(sh * scale));
+          const pw = Math.max(24, Math.round(sw * scale));
+          const ph = Math.max(24, Math.round(sh * scale));
 
           if (this.roiCanvas.width !== pw || this.roiCanvas.height !== ph) {
             this.roiCanvas.width = pw;
@@ -1437,15 +1454,19 @@
           return this.sendToWorker({ type: 'detectMotion', pw, ph, sensitivity, buffer }, [buffer]);
         },
 
-        async evaluateWithdrawal(video, roi, diffThreshold) {
+        async evaluateWithdrawal(video, roi, cfg) {
           const { pw, ph, buffer } = this.extractRoiBuffer(video, roi);
-          return this.sendToWorker({ type: 'evaluateWithdrawal', pw, ph, diffThreshold, buffer }, [buffer]);
+          return this.sendToWorker({
+            type: 'evaluateWithdrawal',
+            pw,
+            ph,
+            diffThreshold: cfg.diffThreshold,
+            autoRebase: cfg.autoRebase,
+            perspectiveBoost: cfg.perspectiveBoost,
+            buffer
+          }, [buffer]);
         },
 
-        /**
-         * Etapa 1 do Pipeline Desacoplado:
-         * Captura instantaneamente o frame bruto em um canvas leve sem bloquear com toBlob()
-         */
         grabRawFrameCanvas(video) {
           const vw = video.videoWidth || 960;
           const vh = video.videoHeight || 540;
@@ -1457,11 +1478,6 @@
           return canvas;
         },
 
-        /**
-         * Etapa 2 do Pipeline Desacoplado:
-         * Converte o canvas capturado em Blob Full-HD + Miniatura compacta (160x90)
-         * durante o tempo ocioso pós-rajada.
-         */
         async encodeFrameWithThumbnail(rawCanvas, roi, annotation = null) {
           const vw = rawCanvas.width;
           const vh = rawCanvas.height;
@@ -1474,7 +1490,6 @@
           const ctx = this.encodeCtx;
           ctx.drawImage(rawCanvas, 0, 0, vw, vh);
 
-          // Desenha ROI e caixa amarela "LOCAL ALTERADO" se aplicável
           const rx = (roi.x / 100) * vw;
           const ry = (roi.y / 100) * vh;
           const rw = (roi.w / 100) * vw;
@@ -1514,7 +1529,6 @@
           }
           ctx.restore();
 
-          // Gera miniatura leve (160x90) para evitar decodificação pesada na galeria
           const tw = 160;
           const th = Math.max(90, Math.round((vh / vw) * tw));
           if (this.thumbCanvas.width !== tw || this.thumbCanvas.height !== th) {
@@ -1536,7 +1550,6 @@
             })
           ]);
 
-          // Libera memória imediata do canvas temporário
           rawCanvas.width = 0;
           rawCanvas.height = 0;
 
@@ -1607,9 +1620,7 @@
           }
 
           const track = this.stream.getVideoTracks()[0];
-          if (!track) {
-            throw new Error('Nenhuma trilha de vídeo disponível na câmera.');
-          }
+          if (!track) throw new Error('Nenhuma trilha de vídeo disponível na câmera.');
 
           track.onended = () => {
             UI.showAlert('Câmera desconectada. Clique em "Câmera" para reconectar.');
@@ -1674,9 +1685,7 @@
           if ('wakeLock' in navigator && !this.wakeLock) {
             try {
               this.wakeLock = await navigator.wakeLock.request('screen');
-              this.wakeLock.addEventListener('release', () => {
-                this.wakeLock = null;
-              });
+              this.wakeLock.addEventListener('release', () => { this.wakeLock = null; });
             } catch (_) {}
           }
         },
@@ -1740,7 +1749,12 @@
           this.monDot.className = `dot ${state || ''}`;
         },
 
-        setBaseStatus(hasBase) {
+        setBaseStatus(hasBase, customLabel = null) {
+          if (customLabel) {
+            this.baseStatusText.textContent = customLabel;
+            this.baseStatusText.style.color = '#86efac';
+            return;
+          }
           this.baseStatusText.textContent = hasBase ? 'Base: Definida ✓' : 'Base: Pendente';
           this.baseStatusText.style.color = hasBase ? '#86efac' : '#fde047';
         },
@@ -1911,6 +1925,8 @@
           sensitivity: document.getElementById('cfgSensitivity'),
           valSensitivity: document.getElementById('valSensitivity'),
           postCheck: document.getElementById('cfgPostCheck'),
+          autoRebase: document.getElementById('cfgAutoRebase'),
+          perspectiveBoost: document.getElementById('cfgPerspectiveBoost'),
           mode: document.getElementById('cfgMode'),
           diffThreshold: document.getElementById('cfgDiffThreshold'),
           valDiffThreshold: document.getElementById('valDiffThreshold'),
@@ -1956,6 +1972,8 @@
           this.els.valSensitivity.textContent = c.sensitivity;
 
           this.els.postCheck.checked = c.postCheck;
+          this.els.autoRebase.checked = c.autoRebase;
+          this.els.perspectiveBoost.checked = c.perspectiveBoost;
           this.els.mode.value = c.mode;
 
           this.els.diffThreshold.value = c.diffThreshold;
@@ -2002,6 +2020,8 @@
             c.idleFps = Number(this.els.idleFps.value);
             c.sensitivity = Number(this.els.sensitivity.value);
             c.postCheck = this.els.postCheck.checked;
+            c.autoRebase = this.els.autoRebase.checked;
+            c.perspectiveBoost = this.els.perspectiveBoost.checked;
             c.mode = this.els.mode.value;
             c.diffThreshold = Number(this.els.diffThreshold.value);
             c.handWait = Number(this.els.handWait.value);
@@ -2024,7 +2044,7 @@
             ConfigStore.save();
           };
 
-          ['idleFps', 'sensitivity', 'postCheck', 'mode', 'diffThreshold', 'handWait', 'burstCount', 'burstInterval', 'cooldown']
+          ['idleFps', 'sensitivity', 'postCheck', 'autoRebase', 'perspectiveBoost', 'mode', 'diffThreshold', 'handWait', 'burstCount', 'burstInterval', 'cooldown']
             .forEach((key) => {
               this.els[key].addEventListener('input', () => updateFromInputs(false));
               this.els[key].addEventListener('change', () => updateFromInputs(false));
@@ -2048,7 +2068,7 @@
       };
 
       /* ========================================================================
-       * 7. MÓDULO DE GALERIA E LIGHTBOX (Miniaturas Leves + Full-HD sob demanda)
+       * 7. MÓDULO DE GALERIA E LIGHTBOX
        * ======================================================================== */
       const GalleryUI = {
         modal: document.getElementById('galleryModal'),
@@ -2064,7 +2084,7 @@
         totalCount: 0,
         thumbUrls: [],
         activeFullUrl: null,
-        currentPhotos: [], // [{ fullBlob, label }]
+        currentPhotos: [],
         currentPhotoIdx: 0,
 
         init() {
@@ -2178,7 +2198,6 @@
           const thumbsRow = document.createElement('div');
           thumbsRow.className = 'thumbs-row';
 
-          // Carrega apenas thumbBlob (~4KB) na grade para economizar RAM/GPU
           const lightboxItems = ev.photos.map((p, idx) => ({
             fullBlob: p.blob,
             label: p.isAfter
@@ -2247,7 +2266,7 @@
       };
 
       /* ========================================================================
-       * 8. CONTROLADOR PRINCIPAL (Frame Skipping Dinâmico + Pipeline 2 Etapas)
+       * 8. CONTROLADOR PRINCIPAL
        * ======================================================================== */
       const AppController = {
         isMonitoring: false,
@@ -2371,7 +2390,6 @@
             const now = performance.now();
             this.lastLoopHeartbeat = now;
 
-            // Frame Skipping Inteligente: em vigília analisa na taxa configurada (ex.: 10 FPS)
             const minIntervalMs = 1000 / Math.max(5, ConfigStore.data.idleFps);
 
             if (
@@ -2446,11 +2464,6 @@
           });
         },
 
-        /**
-         * Pipeline Desacoplado:
-         * - Fase 1 (Alta Frequência): Captura os canvases crus no ritmo exato da rajada sem atraso de JPEG.
-         * - Fase 2 (Assíncrona): Codifica Blobs Full + Miniaturas enquanto aguarda a saída da mão.
-         */
         async handleMotionEvent() {
           this.isProcessingEvent = true;
           const video = CameraManager.video;
@@ -2460,7 +2473,6 @@
           try {
             UI.setMonitorStatus('Capturando...', 'active');
 
-            // Fase 1: Rajada ultra-rápida sem bloqueio de toBlob()
             UI.triggerFlash();
             let lastFrameTime = video.currentTime;
             rawBurstCanvases.push(VisionEngine.grabRawFrameCanvas(video));
@@ -2473,7 +2485,6 @@
               rawBurstCanvases.push(VisionEngine.grabRawFrameCanvas(video));
             }
 
-            // Fase 2: Inicia codificação JPEG sequencial enquanto corre o tempo de espera da mão
             const handWaitStart = performance.now();
             const encodedPhotos = [];
             for (const rawCanvas of rawBurstCanvases) {
@@ -2491,9 +2502,9 @@
                 await new Promise((r) => setTimeout(r, remainingWait));
               }
 
-              // Aguarda estabilidade da cena caso a mão ainda esteja sobre a prateleira
+              // Aguarda estabilidade da cena (mão sair totalmente da mesa)
               let settleAttempts = 0;
-              while (settleAttempts < 6 && this.isMonitoring) {
+              while (settleAttempts < 8 && this.isMonitoring) {
                 const stillMoving = await VisionEngine.detectMotion(video, cfg.roi, cfg.sensitivity);
                 if (!stillMoving.detected) break;
                 await new Promise((r) => setTimeout(r, 250));
@@ -2501,7 +2512,7 @@
               }
 
               if (this.isMonitoring) {
-                const evalRes = await VisionEngine.evaluateWithdrawal(video, cfg.roi, cfg.diffThreshold);
+                const evalRes = await VisionEngine.evaluateWithdrawal(video, cfg.roi, cfg);
                 isWithdrawal = evalRes.isWithdrawal;
                 changePercent = evalRes.changePercent;
 
@@ -2513,11 +2524,15 @@
                     changePercent
                   });
                   encodedPhotos.push({ ...afterEncoded, isAfter: true });
+
+                  if (cfg.autoRebase) {
+                    const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                    UI.setBaseStatus(true, `Base: Atualizada (${nowTime})`);
+                  }
                 }
               }
             }
 
-            // Persistência no IndexedDB conforme modo
             const shouldSave = cfg.mode === 'all' || (cfg.mode === 'strict' && isWithdrawal);
             if (shouldSave && encodedPhotos.length > 0) {
               await DBStore.addEvent({
