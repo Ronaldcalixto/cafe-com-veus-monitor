@@ -1,1688 +1,2584 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <meta http-equiv="Pragma" content="no-cache">
-  <meta http-equiv="Expires" content="0">
-  <title>Monitor da Lojinha - Caixa Ajustável</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ShelfGuard" />
+  <title>ShelfGuard Monitor — v2.0.0</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body {
-      background: #000;
-      color: #fff;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      overflow: hidden;
-      position: fixed;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      height: 100dvh;
-      user-select: none;
-      touch-action: none;
-    }
-    #app-container {
-      position: fixed;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      height: 100dvh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-    /* Melhoria 1: Vídeo renderizado nativamente pela GPU do aparelho (custo zero de CPU) */
-    #input-video {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      display: block;
-      z-index: 1;
-      pointer-events: none;
-    }
-    /* Canvas transparente sobreposto: redesenhado APENAS quando a caixa ou o estado mudam */
-    #output-canvas {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      display: block;
-      z-index: 2;
+    :root {
+      --bg: #000000;
+      --panel: rgba(16, 18, 22, 0.94);
+      --panel-solid: #111318;
+      --border: rgba(255, 255, 255, 0.14);
+      --text: #f3f4f6;
+      --muted: #9ca3af;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #eab308;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
     }
 
-    /* Barra Superior (Melhoria 3: sem backdrop-filter pesado sobre o vídeo) */
-    .top-bar {
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* Stage principal em tela cheia */
+    #app {
+      position: relative;
+      width: 100vw;
+      height: 100dvh;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* Vídeo renderizado nativamente pela GPU sem distorção */
+    #cameraVideo {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+      display: block;
+    }
+
+    /* Overlay interativo alinhado exatamente sobre a área útil do vídeo */
+    #overlayStage {
       position: absolute;
-      top: 12px;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* Caixa de monitoramento */
+    #roiBox {
+      position: absolute;
+      pointer-events: auto;
+      touch-action: none;
+      cursor: move;
+      border: 2.5px dashed var(--green);
+      background: rgba(34, 197, 94, 0.08);
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
+      transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+
+    #roiBox.monitoring {
+      border-style: solid;
+      border-color: var(--red);
+      background: rgba(239, 68, 68, 0.06);
+      cursor: default;
+      pointer-events: none;
+    }
+
+    #roiLabel {
+      position: absolute;
+      top: -26px;
+      left: 0;
+      background: rgba(0, 0, 0, 0.8);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+      pointer-events: none;
+      border: 1px solid rgba(255,255,255,0.18);
+    }
+
+    #roiHint {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.92);
+      text-shadow: 0 1px 4px rgba(0,0,0,0.95);
+      pointer-events: none;
+    }
+
+    #roiBox.monitoring #roiHint {
+      display: none;
+    }
+
+    /* Pontos de redimensionamento (8 handles) e bordas */
+    .resize-handle {
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      background: #ffffff;
+      border: 2.5px solid var(--green);
+      border-radius: 50%;
+      z-index: 12;
+      touch-action: none;
+    }
+
+    #roiBox.monitoring .resize-handle,
+    #roiBox.monitoring .resize-edge {
+      display: none;
+    }
+
+    .handle-nw { top: -9px; left: -9px; cursor: nwse-resize; }
+    .handle-n  { top: -9px; left: calc(50% - 9px); cursor: ns-resize; }
+    .handle-ne { top: -9px; right: -9px; cursor: nesw-resize; }
+    .handle-e  { top: calc(50% - 9px); right: -9px; cursor: ew-resize; }
+    .handle-se { bottom: -9px; right: -9px; cursor: nwse-resize; }
+    .handle-s  { bottom: -9px; left: calc(50% - 9px); cursor: ns-resize; }
+    .handle-sw { bottom: -9px; left: -9px; cursor: nesw-resize; }
+    .handle-w  { top: calc(50% - 9px); left: -9px; cursor: ew-resize; }
+
+    /* Áreas invisíveis nas 4 bordas para facilitar arrasto por toque */
+    .resize-edge {
+      position: absolute;
+      z-index: 11;
+      touch-action: none;
+    }
+    .edge-n { top: -8px; left: 10px; right: 10px; height: 16px; cursor: ns-resize; }
+    .edge-s { bottom: -8px; left: 10px; right: 10px; height: 16px; cursor: ns-resize; }
+    .edge-e { right: -8px; top: 10px; bottom: 10px; width: 16px; cursor: ew-resize; }
+    .edge-w { left: -8px; top: 10px; bottom: 10px; width: 16px; cursor: ew-resize; }
+
+    /* Flash discreto de captura */
+    #captureFlash {
+      position: fixed;
+      inset: 0;
+      background: #ffffff;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 40;
+      transition: opacity 0.12s ease-out;
+    }
+    #captureFlash.active {
+      opacity: 0.35;
+      transition: none;
+    }
+
+    /* Barra superior de status */
+    #topBar {
+      position: fixed;
+      top: calc(10px + var(--safe-top));
       left: 12px;
       right: 12px;
+      z-index: 25;
       display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      z-index: 10;
-      pointer-events: none;
+      flex-wrap: wrap;
       gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+      pointer-events: none;
     }
-    .status-badge {
-      background: rgba(12, 12, 12, 0.92);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      padding: 8px 14px;
-      border-radius: 20px;
-      font-size: 13px;
+
+    .status-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
       pointer-events: auto;
-      max-width: 50%;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
     }
-    .indicator {
-      display: inline-block;
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(12, 14, 18, 0.82);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .dot {
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: #ff9100;
-      margin-right: 6px;
+      background: var(--muted);
     }
-    .indicator.running { background: #00e676; }
-    .indicator.alert { background: #ff3b30; }
+    .dot.ok { background: var(--green); box-shadow: 0 0 8px var(--green); }
+    .dot.active { background: var(--red); box-shadow: 0 0 8px var(--red); animation: pulse 1.2s infinite; }
+    .dot.warn { background: var(--yellow); }
 
-    .btn-group {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-      gap: 6px;
-      pointer-events: auto;
-    }
-    .btn-icon {
-      background: rgba(12, 12, 12, 0.92);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      color: #fff;
-      padding: 8px 12px;
-      border-radius: 20px;
-      font-size: 13px;
-      cursor: pointer;
-    }
-    #btn-toggle {
-      background: #00e676;
-      color: #000;
-      font-weight: bold;
-      border: none;
-    }
-    #btn-toggle.active {
-      background: #ff5252;
-      color: #fff;
-    }
-    #btn-retry { background: #ff9100; color: #000; font-weight: bold; border: none; }
-
-    /* Flash */
-    #flash-overlay {
-      position: absolute;
-      top: 0; left: 0; width: 100%; height: 100%;
-      background: white;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.15s ease-out;
-      z-index: 20;
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
     }
 
-    /* Modais (Melhoria 3: fundo sólido escuro sem filtro gaussiano na GPU) */
-    .modal {
-      position: absolute;
-      top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(10, 10, 10, 0.98);
-      z-index: 100;
-      display: none;
-      flex-direction: column;
-    }
-    .modal-header {
-      padding: 16px 20px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .modal-title { font-size: 18px; font-weight: bold; }
-    .close-btn { background: none; border: none; color: #aaa; font-size: 24px; cursor: pointer; padding: 4px 8px; }
-    .modal-body { flex: 1; overflow-y: auto; padding: 20px 20px 64px; touch-action: pan-y; }
-
-    .config-card {
-      background: rgba(255, 255, 255, 0.05);
-      padding: 14px;
-      border-radius: 12px;
-      margin-bottom: 16px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    .config-title { font-size: 14px; font-weight: bold; margin-bottom: 6px; }
-    .config-desc { font-size: 12px; color: #888; margin-bottom: 10px; }
-    .slider-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-    .slider-row label { font-size: 13px; color: #aaa; min-width: 75px; }
-    .slider-row input { flex: 1; }
-    .slider-val { font-size: 13px; font-weight: bold; min-width: 50px; text-align: right; }
-    .toggle-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-    .toggle-row label { font-size: 13px; color: #fff; font-weight: 600; cursor: pointer; }
-    .switch { position: relative; display: inline-block; width: 46px; height: 26px; }
-    .switch input { opacity: 0; width: 0; height: 0; }
-    .switch-slider {
-      position: absolute; cursor: pointer; inset: 0;
-      background-color: rgba(255, 255, 255, 0.2);
-      transition: .2s; border-radius: 26px;
-    }
-    .switch-slider:before {
-      position: absolute; content: ""; height: 20px; width: 20px;
-      left: 3px; bottom: 3px; background-color: white;
-      transition: .2s; border-radius: 50%;
-    }
-    .switch input:checked + .switch-slider { background-color: #00e676; }
-    .switch input:checked + .switch-slider:before { transform: translateX(20px); }
-    .sub-config { border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 10px; margin-top: 6px; }
-
-    /* Galeria */
-    .event-card {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 10px;
-      padding: 12px;
-      margin-bottom: 12px;
-    }
-    .event-meta {
-      font-size: 12px;
-      color: #aaa;
-      margin-bottom: 8px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-    .event-badge {
-      padding: 3px 8px;
-      border-radius: 12px;
-      font-size: 11px;
-      font-weight: bold;
-    }
-    .event-badge.retirado {
-      background: rgba(255, 59, 48, 0.2);
-      color: #ff6b6b;
-      border: 1px solid rgba(255, 59, 48, 0.45);
-    }
-    .event-badge.movimento {
-      background: rgba(255, 255, 255, 0.08);
-      color: #bbb;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-    }
-    .thumb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; }
-    .thumb-wrap { position: relative; }
-    .thumb-grid img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 6px; cursor: pointer; border: 1px solid transparent; display: block; background: #181818; }
-    .thumb-grid img:active { border-color: #00e676; }
-    .thumb-label {
-      position: absolute;
-      bottom: 4px; left: 4px;
-      background: rgba(0, 0, 0, 0.85);
-      color: #ffeb3b;
-      font-size: 10px;
-      font-weight: bold;
-      padding: 2px 5px;
-      border-radius: 4px;
-      pointer-events: none;
-    }
-    .gallery-msg { text-align: center; color: #888; margin-top: 40px; }
-    .btn-load-more {
-      display: block;
-      width: 100%;
-      padding: 12px;
-      margin: 12px 0 24px;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      color: #fff;
-      font-size: 14px;
-      font-weight: bold;
-      border-radius: 10px;
-      cursor: pointer;
-    }
-    .btn-load-more:active { background: rgba(255, 255, 255, 0.2); }
-
-    /* Lightbox Interativo */
-    #lightbox {
+    /* Banner de erro ou alerta */
+    #alertBanner {
       position: fixed;
-      inset: 0; width: 100%; height: 100%; height: 100dvh;
-      background: rgba(0, 0, 0, 0.96);
-      z-index: 200;
-      display: none;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-    }
-    #lightbox img {
-      max-width: 100vw;
-      max-height: 75vh;
-      object-fit: contain;
-    }
-    .lightbox-toolbar {
-      position: absolute;
-      top: 16px;
-      left: 16px;
-      right: 16px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      z-index: 210;
-    }
-    .lightbox-nav {
-      position: absolute;
-      top: 50%;
-      left: 0;
-      width: 100%;
-      display: flex;
-      justify-content: space-between;
-      padding: 0 16px;
-      transform: translateY(-50%);
-      pointer-events: none;
-      z-index: 210;
-    }
-    .lightbox-nav button { pointer-events: auto; }
-    .btn-back {
-      background: rgba(30, 30, 30, 0.92);
-      border: 1px solid rgba(255, 255, 255, 0.3);
+      top: calc(56px + var(--safe-top));
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 35;
+      background: rgba(185, 28, 28, 0.95);
       color: #fff;
-      padding: 10px 18px;
-      border-radius: 24px;
-      font-size: 14px;
+      border: 1px solid rgba(255,255,255,0.25);
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 500;
+      max-width: min(92vw, 520px);
+      text-align: center;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+      display: none;
+    }
+
+    /* Controles inferiores + Rodapé */
+    #bottomDock {
+      position: fixed;
+      bottom: calc(8px + var(--safe-bottom));
+      left: 10px;
+      right: 10px;
+      z-index: 25;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      pointer-events: none;
+    }
+
+    .controls-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      background: rgba(14, 16, 20, 0.85);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border);
+      padding: 8px;
+      border-radius: 16px;
+      pointer-events: auto;
+      max-width: 100%;
+    }
+
+    .btn {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      font-size: 13px;
       font-weight: 600;
+      padding: 10px 14px;
+      border-radius: 10px;
       cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: background 0.15s, transform 0.1s, border-color 0.15s;
+      min-height: 40px;
+    }
+
+    .btn:active { transform: scale(0.97); }
+    .btn:hover { background: rgba(255, 255, 255, 0.14); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .btn-primary {
+      background: var(--green);
+      color: #041309;
+      border-color: transparent;
+    }
+    .btn-primary:hover { background: #16a34a; }
+
+    .btn-danger {
+      background: var(--red);
+      color: #fff;
+      border-color: transparent;
+    }
+    .btn-danger:hover { background: #dc2626; }
+
+    .btn-accent {
+      background: var(--accent);
+      color: #fff;
+      border-color: transparent;
+    }
+    .btn-accent:hover { background: var(--accent-hover); }
+
+    #footerVersion {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.65);
+      background: rgba(0, 0, 0, 0.65);
+      padding: 2px 10px;
+      border-radius: 999px;
+      pointer-events: auto;
       display: flex;
       align-items: center;
       gap: 8px;
     }
-    .btn-nav {
-      background: rgba(35, 35, 35, 0.9);
-      border: 1px solid rgba(255, 255, 255, 0.2);
+
+    /* Modais (Ajustes & Galeria) */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.86);
+      backdrop-filter: blur(6px);
+      z-index: 50;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+    }
+    .modal-backdrop.open { display: flex; }
+
+    .modal-card {
+      background: var(--panel-solid);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 680px;
+      max-height: 90dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+    }
+
+    .modal-card.wide { max-width: 960px; }
+
+    .modal-header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .modal-header h2 {
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .modal-body {
+      padding: 16px 18px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      user-select: text;
+    }
+
+    .modal-footer {
+      padding: 12px 18px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .settings-section {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      background: rgba(255,255,255,0.02);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .settings-section h3 {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--accent);
+    }
+
+    .control-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .control-row-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+    }
+
+    .control-val {
+      font-weight: 700;
       color: #fff;
-      width: 50px;
-      height: 50px;
-      border-radius: 25px;
-      font-size: 20px;
+      background: rgba(255,255,255,0.1);
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+      height: 24px;
+      cursor: pointer;
+    }
+
+    select, input[type="checkbox"] {
+      accent-color: var(--accent);
+    }
+
+    select.form-select {
+      background: #1c2029;
+      color: #fff;
+      border: 1px solid var(--border);
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 13px;
+      width: 100%;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    @media (max-width: 520px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      .btn { padding: 9px 11px; font-size: 12px; }
+    }
+
+    /* Galeria */
+    .event-card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      background: rgba(255,255,255,0.025);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .event-card.withdrawal {
+      border-color: rgba(234, 179, 8, 0.55);
+      background: rgba(234, 179, 8, 0.06);
+    }
+
+    .event-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .tag {
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .tag-withdrawal { background: rgba(234, 179, 8, 0.22); color: #fde047; border: 1px solid rgba(234, 179, 8, 0.5); }
+    .tag-motion { background: rgba(59, 130, 246, 0.2); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.4); }
+
+    .thumbs-row {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+
+    .thumb-wrap {
+      position: relative;
+      flex: 0 0 auto;
+      width: 116px;
+      height: 76px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      background: #000;
+    }
+
+    .thumb-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .thumb-badge {
+      position: absolute;
+      bottom: 4px;
+      left: 4px;
+      background: rgba(0,0,0,0.8);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 5px;
+      border-radius: 4px;
+    }
+    .thumb-badge.after {
+      background: var(--yellow);
+      color: #000;
+    }
+
+    /* Lightbox */
+    #lightboxModal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.96);
+      z-index: 70;
+      display: none;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: calc(12px + var(--safe-top)) 14px calc(14px + var(--safe-bottom));
+    }
+    #lightboxModal.open { display: flex; }
+
+    .lb-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .lb-stage {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      margin: 10px 0;
+    }
+
+    #lbImage {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+
+    .lb-controls {
       display: flex;
       justify-content: center;
       align-items: center;
-      cursor: pointer;
-    }
-    .btn-nav:active { background: rgba(80, 80, 80, 0.95); }
-    #lightbox-counter {
-      color: #fff;
-      background: rgba(0, 0, 0, 0.75);
-      padding: 4px 10px;
-      border-radius: 12px;
-      font-size: 14px;
-      font-weight: bold;
-      min-width: 80px;
-      text-align: center;
-    }
-
-    /* Aviso temporário */
-    #toast {
-      position: fixed;
-      top: calc(64px + env(safe-area-inset-top, 0px));
-      left: 50%;
-      transform: translateX(-50%);
-      max-width: 90vw;
-      background: rgba(150, 30, 30, 0.96);
-      border: 1px solid rgba(255, 255, 255, 0.25);
-      padding: 10px 16px;
-      border-radius: 12px;
-      font-size: 13px;
-      line-height: 1.35;
-      text-align: center;
-      z-index: 300;
-      display: none;
-      pointer-events: none;
-    }
-    #toast.show { display: block; }
-
-    /* Selo de versão */
-    #version-badge {
-      position: fixed;
-      bottom: calc(18px + env(safe-area-inset-bottom, 0px));
-      left: 16px;
-      z-index: 1000;
-      font-size: 12px;
-      font-weight: bold;
-      color: #ff6b6b;
-      background: rgba(0, 0, 0, 0.82);
-      border: 1px solid rgba(255, 107, 107, 0.35);
-      padding: 4px 10px;
-      border-radius: 8px;
-      pointer-events: none;
+      gap: 14px;
     }
   </style>
 </head>
 <body>
+  <div id="app">
+    <video id="cameraVideo" autoplay muted playsinline></video>
 
-<div id="app-container">
-  <div class="top-bar">
-    <div class="status-badge">
-      <span class="indicator" id="status-dot"></span>
-      <span id="status-text">Carregando câmera...</span>
-    </div>
-
-    <div class="btn-group">
-      <button class="btn-icon" id="btn-retry" hidden>🔄 Câmera</button>
-      <button class="btn-icon" id="btn-ref" hidden title="Atualizar foto base da mesa">📌 Base</button>
-      <button class="btn-icon" id="btn-toggle">▶️ Iniciar</button>
-      <button class="btn-icon" id="btn-config">⚙️ Ajustes</button>
-      <button class="btn-icon" id="btn-gallery">🖼️ Galeria</button>
-    </div>
-  </div>
-
-  <div id="flash-overlay"></div>
-  <video id="input-video" playsinline autoplay muted></video>
-  <!-- Canvas transparente apenas para a moldura da caixa delimitadora -->
-  <canvas id="output-canvas"></canvas>
-</div>
-
-<!-- Modal Config -->
-<div class="modal" id="modal-config">
-  <div class="modal-header">
-    <div class="modal-title">⚙️ Ajustes do Monitor</div>
-    <button class="close-btn" id="close-config">&times;</button>
-  </div>
-  <div class="modal-body">
-    <!-- Sensibilidade -->
-    <div class="config-card">
-      <div class="config-title">🎚️ Sensibilidade ao Movimento</div>
-      <div class="config-desc">
-        Aumente o valor se estiver disparando com sombras/luzes. Diminua se não detectar a mão.<br>
-        Padrão: <span id="sens-default">28</span>.
-      </div>
-      <div class="slider-row">
-        <label>Sensib.:</label>
-        <input type="range" id="slider-sens" min="10" max="80" step="1" value="28">
-        <span class="slider-val" id="val-sens">28</span>
+    <!-- Overlay alinhado ao retângulo renderizado do vídeo -->
+    <div id="overlayStage">
+      <div id="roiBox">
+        <div id="roiLabel">Área Monitorada</div>
+        <div id="roiHint">Arraste para mover ou use os pontos para redimensionar</div>
+        <div class="resize-edge edge-n" data-dir="n"></div>
+        <div class="resize-edge edge-s" data-dir="s"></div>
+        <div class="resize-edge edge-e" data-dir="e"></div>
+        <div class="resize-edge edge-w" data-dir="w"></div>
+        <div class="resize-handle handle-nw" data-dir="nw"></div>
+        <div class="resize-handle handle-n" data-dir="n"></div>
+        <div class="resize-handle handle-ne" data-dir="ne"></div>
+        <div class="resize-handle handle-e" data-dir="e"></div>
+        <div class="resize-handle handle-se" data-dir="se"></div>
+        <div class="resize-handle handle-s" data-dir="s"></div>
+        <div class="resize-handle handle-sw" data-dir="sw"></div>
+        <div class="resize-handle handle-w" data-dir="w"></div>
       </div>
     </div>
 
-    <!-- Monitoramento de Retirada de Itens (Antes x Depois) -->
-    <div class="config-card">
-      <div class="config-title">🛒 Verificação de Retirada Pós-Ação</div>
-      <div class="config-desc">
-        Após o disparo, aguarda a mão sair e compara a mesa com a foto base para identificar se algum produto foi retirado e destacar o local.
-      </div>
-      <div class="toggle-row">
-        <label for="chk-pos-acao">Ativar verificação pós-ação</label>
-        <label class="switch">
-          <input type="checkbox" id="chk-pos-acao">
-          <span class="switch-slider"></span>
-        </label>
-      </div>
-      <div class="sub-config" id="pos-acao-opcoes">
-        <div class="slider-row">
-          <label>Comport.:</label>
-          <select id="select-modo-item" style="flex:1; background:#222; color:#fff; border:1px solid #444; padding:6px 8px; border-radius:8px; font-size:13px;">
-            <option value="etiquetar">Salvar tudo (etiquetar retiradas)</option>
-            <option value="estrito">Salvar apenas se item for retirado</option>
-          </select>
+    <div id="captureFlash"></div>
+
+    <!-- Status Superior -->
+    <header id="topBar">
+      <div class="status-group">
+        <div class="badge" id="camStatusBadge">
+          <span class="dot" id="camDot"></span>
+          <span id="camStatusText">Câmera: Iniciando...</span>
         </div>
-        <div class="slider-row">
-          <label>Limiar Item:</label>
-          <input type="range" id="slider-item-diff" min="10" max="60" step="1" value="22">
-          <span class="slider-val" id="val-item-diff">22</span>
-        </div>
-        <div class="slider-row" style="margin-bottom:0;">
-          <label>Espera Mão:</label>
-          <input type="range" id="slider-pos-delay" min="500" max="4000" step="250" value="2000">
-          <span class="slider-val" id="val-pos-delay">2.0s</span>
+        <div class="badge" id="monStatusBadge">
+          <span class="dot warn" id="monDot"></span>
+          <span id="monStatusText">Pausado</span>
         </div>
       </div>
+      <div class="status-group">
+        <div class="badge" id="workerStatusBadge" title="Processamento paralelo via Web Worker">
+          <span id="engineStatusText">Worker: Ativo</span>
+        </div>
+        <div class="badge" id="baseStatusBadge">
+          <span id="baseStatusText">Base: Pendente</span>
+        </div>
+      </div>
+    </header>
+
+    <div id="alertBanner" role="alert"></div>
+
+    <!-- Barra Inferior e Versão -->
+    <footer id="bottomDock">
+      <div class="controls-row">
+        <button class="btn" id="btnCamera" title="Reiniciar câmera">Câmera</button>
+        <button class="btn" id="btnBase" title="Capturar imagem de referência da mesa">Base</button>
+        <button class="btn btn-primary" id="btnToggleMonitor">Iniciar</button>
+        <button class="btn" id="btnSettings">Ajustes</button>
+        <button class="btn" id="btnGallery">Galeria (<span id="galleryCount">0</span>)</button>
+        <button class="btn btn-accent" id="btnInstallPwa" style="display:none;" title="Instalar aplicativo offline">Instalar App</button>
+      </div>
+      <div id="footerVersion">
+        <span>ShelfGuard Monitor • v2.0.0 PWA</span>
+        <span id="offlineBadge">• Offline Ready</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- MODAL DE AJUSTES -->
+  <div class="modal-backdrop" id="settingsModal" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>Ajustes do Sistema</h2>
+        <button class="btn" id="closeSettingsBtn">Fechar</button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-section">
+          <h3>Câmera & Desempenho</h3>
+          <div class="control-row">
+            <label for="cfgCameraDevice">Lente / Dispositivo de Câmera</label>
+            <select id="cfgCameraDevice" class="form-select">
+              <option value="">Padrão (Traseira Automática)</option>
+            </select>
+          </div>
+          <div class="control-row">
+            <div class="control-row-header">
+              <label for="cfgIdleFps">Taxa de análise em vigília (economia de CPU)</label>
+              <span class="control-val" id="valIdleFps">10 FPS</span>
+            </div>
+            <input type="range" id="cfgIdleFps" min="5" max="30" step="1" value="10" />
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h3>Detecção de Movimento</h3>
+          <div class="control-row">
+            <div class="control-row-header">
+              <label for="cfgSensitivity">Sensibilidade ao movimento</label>
+              <span class="control-val" id="valSensitivity">28</span>
+            </div>
+            <input type="range" id="cfgSensitivity" min="10" max="80" step="1" value="28" />
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h3>Verificação Pós-Ação (Identificação de Retirada)</h3>
+          <div class="control-row-header">
+            <label for="cfgPostCheck">Ativar verificação pós-ação</label>
+            <input type="checkbox" id="cfgPostCheck" checked style="width:20px;height:20px;" />
+          </div>
+          <div class="control-row">
+            <label for="cfgMode">Modo de identificação</label>
+            <select id="cfgMode" class="form-select">
+              <option value="all">Salvar tudo (movimentos e retiradas)</option>
+              <option value="strict">Modo estrito (somente possível retirada)</option>
+            </select>
+          </div>
+          <div class="control-row">
+            <div class="control-row-header">
+              <label for="cfgDiffThreshold">Limiar de alteração do produto (%)</label>
+              <span class="control-val" id="valDiffThreshold">22%</span>
+            </div>
+            <input type="range" id="cfgDiffThreshold" min="10" max="60" step="1" value="22" />
+          </div>
+          <div class="control-row">
+            <div class="control-row-header">
+              <label for="cfgHandWait">Tempo de espera para saída da mão (ms)</label>
+              <span class="control-val" id="valHandWait">2000 ms</span>
+            </div>
+            <input type="range" id="cfgHandWait" min="500" max="4000" step="100" value="2000" />
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h3>Captura Rápida</h3>
+          <div class="control-row">
+            <div class="control-row-header">
+              <label for="cfgBurstCount">Quantidade de fotos por evento</label>
+              <span class="control-val" id="valBurstCount">3</span>
+            </div>
+            <input type="range" id="cfgBurstCount" min="1" max="5" step="1" value="3" />
+          </div>
+          <div class="control-row">
+            <div class="control-row-header">
+              <label for="cfgBurstInterval">Intervalo entre fotos (ms)</label>
+              <span class="control-val" id="valBurstInterval">80 ms</span>
+            </div>
+            <input type="range" id="cfgBurstInterval" min="40" max="600" step="10" value="80" />
+          </div>
+          <div class="control-row">
+            <div class="control-row-header">
+              <label for="cfgCooldown">Cooldown entre eventos (ms)</label>
+              <span class="control-val" id="valCooldown">1500 ms</span>
+            </div>
+            <input type="range" id="cfgCooldown" min="500" max="5000" step="100" value="1500" />
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h3>Caixa de Monitoramento (%)</h3>
+          <div class="grid-2">
+            <div class="control-row">
+              <div class="control-row-header">
+                <label for="cfgRoiW">Largura</label>
+                <span class="control-val" id="valRoiW">60%</span>
+              </div>
+              <input type="range" id="cfgRoiW" min="10" max="100" step="1" value="60" />
+            </div>
+            <div class="control-row">
+              <div class="control-row-header">
+                <label for="cfgRoiH">Altura</label>
+                <span class="control-val" id="valRoiH">55%</span>
+              </div>
+              <input type="range" id="cfgRoiH" min="10" max="100" step="1" value="55" />
+            </div>
+            <div class="control-row">
+              <div class="control-row-header">
+                <label for="cfgRoiX">Posição X</label>
+                <span class="control-val" id="valRoiX">20%</span>
+              </div>
+              <input type="range" id="cfgRoiX" min="0" max="90" step="1" value="20" />
+            </div>
+            <div class="control-row">
+              <div class="control-row-header">
+                <label for="cfgRoiY">Posição Y</label>
+                <span class="control-val" id="valRoiY">22%</span>
+              </div>
+              <input type="range" id="cfgRoiY" min="0" max="90" step="1" value="22" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" id="resetSettingsBtn">Restaurar Padrões</button>
+        <button class="btn btn-accent" id="saveSettingsBtn">Concluir</button>
+      </div>
     </div>
+  </div>
 
-    <!-- Quantidade de Fotos e Velocidade do Disparo -->
-    <div class="config-card">
-      <div class="config-title">⚡ Disparo Rápido (Burst)</div>
-      <div class="config-desc">A 1ª foto sai no instante da detecção; as demais usam sempre um quadro novo da câmera.</div>
-      <div class="slider-row">
-        <label>Fotos:</label>
-        <input type="range" id="slider-count" min="1" max="5" step="1" value="3">
-        <span class="slider-val" id="val-count">3 fotos</span>
+  <!-- MODAL DA GALERIA -->
+  <div class="modal-backdrop" id="galleryModal" aria-hidden="true">
+    <div class="modal-card wide">
+      <div class="modal-header">
+        <h2>Galeria de Registros</h2>
+        <button class="btn" id="closeGalleryBtn">Fechar</button>
       </div>
-      <div class="slider-row">
-        <label>Intervalo:</label>
-        <input type="range" id="slider-interval" min="40" max="600" step="10" value="80">
-        <span class="slider-val" id="val-interval">80ms</span>
+      <div class="modal-body" id="galleryList">
+        <p style="color:var(--muted);text-align:center;">Nenhum registro encontrado.</p>
       </div>
-      <div class="slider-row">
-        <label>Pausa:</label>
-        <input type="range" id="slider-cooldown" min="500" max="5000" step="100" value="1500">
-        <span class="slider-val" id="val-cooldown">1.5s</span>
-      </div>
-      <div class="config-desc" style="margin-bottom:0">Pausa = tempo mínimo entre um evento e o próximo.</div>
-    </div>
-
-    <!-- Ajustes Numéricos Manuais -->
-    <div class="config-card">
-      <div class="config-title">📐 Ajuste Manual da Caixa</div>
-      <div class="config-desc">Arraste a caixa na tela principal ou ajuste aqui:</div>
-      <div class="slider-row">
-        <label>Largura:</label>
-        <input type="range" id="slider-box-w" min="10" max="100" step="1" value="50">
-        <span class="slider-val" id="val-box-w">50%</span>
-      </div>
-      <div class="slider-row">
-        <label>Altura:</label>
-        <input type="range" id="slider-box-h" min="10" max="100" step="1" value="60">
-        <span class="slider-val" id="val-box-h">60%</span>
-      </div>
-      <div class="slider-row">
-        <label>Pos. X:</label>
-        <input type="range" id="slider-box-x" min="0" max="100" step="1" value="40">
-        <span class="slider-val" id="val-box-x">40%</span>
-      </div>
-      <div class="slider-row">
-        <label>Pos. Y:</label>
-        <input type="range" id="slider-box-y" min="0" max="100" step="1" value="20">
-        <span class="slider-val" id="val-box-y">20%</span>
+      <div class="modal-footer">
+        <button class="btn btn-danger" id="clearAllBtn">Limpar Tudo</button>
+        <button class="btn" id="loadMoreBtn" style="display:none;">Carregar registros anteriores</button>
       </div>
     </div>
   </div>
-</div>
 
-<!-- Modal Galeria -->
-<div class="modal" id="modal-gallery">
-  <div class="modal-header">
-    <div class="modal-title">🖼️ Registros Capturados</div>
-    <div style="display: flex; gap: 8px;">
-      <button class="btn-icon" id="btn-clear" style="color: #ff5252;">🗑️ Limpar</button>
-      <button class="close-btn" id="close-gallery">&times;</button>
+  <!-- LIGHTBOX -->
+  <div id="lightboxModal" aria-hidden="true">
+    <div class="lb-top">
+      <span class="badge" id="lbCounter">1 / 1</span>
+      <span class="badge" id="lbCaption">Foto</span>
+      <button class="btn" id="closeLightboxBtn">Voltar à Galeria</button>
+    </div>
+    <div class="lb-stage">
+      <img id="lbImage" alt="Visualização ampliada" />
+    </div>
+    <div class="lb-controls">
+      <button class="btn" id="lbPrevBtn">◀ Anterior</button>
+      <button class="btn" id="lbNextBtn">Próxima ▶</button>
     </div>
   </div>
-  <div class="modal-body" id="gallery-container">
-    <div class="gallery-msg">Nenhum registro ainda.</div>
-  </div>
-</div>
 
-<!-- Lightbox Zoom Interativo -->
-<div id="lightbox">
-  <div class="lightbox-toolbar">
-    <button class="btn-back" id="btn-close-lightbox">⬅️ Voltar para a Galeria</button>
-    <span id="lightbox-counter">1 / 1</span>
-  </div>
-  <img id="lightbox-img" src="" alt="Zoom">
-  <div class="lightbox-nav">
-    <button class="btn-nav" id="btn-lb-prev">◀️</button>
-    <button class="btn-nav" id="btn-lb-next">▶️</button>
-  </div>
-</div>
+  <script>
+    /**
+     * ============================================================================
+     * INSTRUÇÕES DE INSTALAÇÃO E EXECUÇÃO (PWA + OFFLINE)
+     * ============================================================================
+     * 1. Salve este código como `index.html`.
+     * 2. Execute em HTTPS ou `http://localhost` (ex.: `npx serve .` ou
+     *    `python -m http.server 8080`).
+     * 3. O app registra automaticamente o Manifest PWA e o Service Worker
+     *    para funcionar 100% offline e pode ser instalado via botão "Instalar App"
+     *    ou menu "Adicionar à tela inicial" do navegador.
+     * ============================================================================
+     */
 
-<div id="toast" role="status" aria-live="polite"></div>
-<div id="version-badge">v1.5.0</div>
+    (() => {
+      'use strict';
 
-<script>
-  /* ================= CONFIGURAÇÃO CENTRAL ================= */
-  const APP_VERSION = "1.5.0";
-  const CONFIG_VERSAO = 3;
+      const APP_VERSION = '2.0.0';
+      const STORAGE_KEY = 'shelfguard_config_v2';
+      const JPEG_QUALITY = 0.82;
+      const THUMB_QUALITY = 0.65;
 
-  const CONFIG = {
-    db: { nome: "LojinhaBoxDB", versao: 1, store: "eventos" },
-    deteccao: {
-      larguraAnalise: 240,
-      grade: 5,
-      razaoMinima: 0.010,
-      razaoMaxima: 0.85,
-      razaoCelulaMinima: 0.08,
-      celulasMinimas: 2,
-      offsetLuzMax: 40,
-      estabilizacaoIntervaloMs: 350,
-      itemAreaMinima: 0.012
-    },
-    padroes: {
-      sensibilidade: 28,
-      burstCount: 3,
-      burstInterval: 80,
-      cooldownMs: 1500,
-      posAcaoAtiva: true,
-      modoItem: "etiquetar",
-      itemDiff: 22,
-      posDelayMs: 2000,
-      caixa: { x: 0.40, y: 0.20, w: 0.50, h: 0.60 }
-    },
-    limites: {
-      sensibilidade: [10, 80],
-      burstCount: [1, 5],
-      burstInterval: [40, 600],
-      cooldownMs: [500, 5000],
-      itemDiff: [10, 60],
-      posDelayMs: [500, 4000],
-      caixaMin: 0.10
-    },
-    captura: { qualidadeJpeg: 0.75, timeoutFrameMs: 1000 },
-    camera: { timeoutProntaMs: 8000, watchdogMs: 2000 },
-    interacao: { tolerancia: 0.08 },
-    galeria: { tamanhoPagina: 20 }
-  };
-  const DEBUG = /[?&#]debug/.test(location.href);
+      /* ========================================================================
+       * 0. MÓDULO PWA (Manifest Dinâmico + Service Worker Offline)
+       * ======================================================================== */
+      const PWAManager = {
+        deferredPrompt: null,
 
-  /* ================= UTILITÁRIOS ================= */
-  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-  const $ = (id) => document.getElementById(id);
+        init() {
+          this.injectManifest();
+          this.registerServiceWorker();
+          this.bindInstallPrompt();
+        },
 
-  const prefs = {
-    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
-    set(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
-  };
-  function lerNumero(chave, padrao, min, max, inteiro) {
-    const raw = prefs.get(chave);
-    if (raw === null) return padrao;
-    const n = inteiro ? parseInt(raw, 10) : parseFloat(raw);
-    return Number.isFinite(n) ? clamp(n, min, max) : padrao;
-  }
+        injectManifest() {
+          const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+            <rect width="512" height="512" rx="96" fill="#090b10"/>
+            <rect x="76" y="106" width="360" height="300" rx="28" fill="none" stroke="#22c55e" stroke-width="24" stroke-dasharray="36 18"/>
+            <circle cx="256" cy="256" r="54" fill="#ef4444"/>
+          </svg>`;
+          const iconUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(iconSvg);
 
-  (function migrarPreferencias() {
-    const v = parseInt(prefs.get("configVersao") || "0", 10);
-    if (v < CONFIG_VERSAO) {
-      if (prefs.get("sensibilidade") === "35") prefs.set("sensibilidade", CONFIG.padroes.sensibilidade);
-      if (prefs.get("burstInterval") === "180") prefs.set("burstInterval", CONFIG.padroes.burstInterval);
-      prefs.set("configVersao", CONFIG_VERSAO);
-    }
-  })();
+          const manifest = {
+            name: 'ShelfGuard Monitor',
+            short_name: 'ShelfGuard',
+            description: 'Monitoramento inteligente de prateleiras e balcões offline.',
+            start_url: location.href,
+            scope: './',
+            display: 'standalone',
+            orientation: 'any',
+            background_color: '#000000',
+            theme_color: '#000000',
+            icons: [
+              { src: iconUrl, sizes: '192x192', type: 'image/svg+xml', purpose: 'any maskable' },
+              { src: iconUrl, sizes: '512x512', type: 'image/svg+xml', purpose: 'any maskable' }
+            ]
+          };
 
-  /* ================= ESTADO ================= */
-  const L = CONFIG.limites, P = CONFIG.padroes;
-  const estado = {
-    sensibilidade: lerNumero("sensibilidade", P.sensibilidade, ...L.sensibilidade, true),
-    burstCount: lerNumero("burstCount", P.burstCount, ...L.burstCount, true),
-    burstInterval: lerNumero("burstInterval", P.burstInterval, ...L.burstInterval, true),
-    cooldownMs: lerNumero("cooldownMs", P.cooldownMs, ...L.cooldownMs, true),
-    posAcaoAtiva: prefs.get("posAcaoAtiva") === null ? P.posAcaoAtiva : prefs.get("posAcaoAtiva") === "true",
-    itemDiff: lerNumero("itemDiff", P.itemDiff, ...L.itemDiff, true),
-    posDelayMs: lerNumero("posDelayMs", P.posDelayMs, ...L.posDelayMs, true),
-    modoItem: (prefs.get("modoItem") === "estrito" ? "estrito" : "etiquetar")
-  };
+          const blob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
+          const link = document.createElement('link');
+          link.rel = 'manifest';
+          link.href = URL.createObjectURL(blob);
+          document.head.appendChild(link);
+        },
 
-  /* ================= LIMITES DA CAIXA ================= */
-  function normalizarCaixa(c) {
-    const min = L.caixaMin;
-    const num = (v, d) => Number.isFinite(v) ? v : d;
-    const w = clamp(num(c.w, P.caixa.w), min, 1);
-    const h = clamp(num(c.h, P.caixa.h), min, 1);
-    return {
-      w, h,
-      x: clamp(num(c.x, P.caixa.x), 0, 1 - w),
-      y: clamp(num(c.y, P.caixa.y), 0, 1 - h)
-    };
-  }
-  const caixa = normalizarCaixa({
-    x: lerNumero("boxX", P.caixa.x, 0, 1),
-    y: lerNumero("boxY", P.caixa.y, 0, 1),
-    w: lerNumero("boxW", P.caixa.w, 0, 1),
-    h: lerNumero("boxH", P.caixa.h, 0, 1)
-  });
+        async registerServiceWorker() {
+          const offlineBadge = document.getElementById('offlineBadge');
+          if (!('serviceWorker' in navigator)) {
+            offlineBadge.textContent = '• Modo Local';
+            return;
+          }
 
-  function definirCaixa(parcial) {
-    Object.assign(caixa, normalizarCaixa({ ...caixa, ...parcial }));
-    prefs.set("boxX", caixa.x); prefs.set("boxY", caixa.y);
-    prefs.set("boxW", caixa.w); prefs.set("boxH", caixa.h);
-    resetarReferencia();
-    sincronizarSliders();
-    desenharOverlay();
-  }
+          // Código do Service Worker para cache Cache-First / Network-Fallback offline
+          const swCode = `
+            const CACHE_NAME = 'shelfguard-pwa-v${APP_VERSION}';
+            self.addEventListener('install', (event) => {
+              self.skipWaiting();
+              event.waitUntil(
+                caches.open(CACHE_NAME).then((cache) => cache.addAll(['./']).catch(() => {}))
+              );
+            });
+            self.addEventListener('activate', (event) => {
+              event.waitUntil(
+                caches.keys().then((keys) =>
+                  Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+                ).then(() => self.clients.claim())
+              );
+            });
+            self.addEventListener('fetch', (event) => {
+              if (event.request.method !== 'GET') return;
+              event.respondWith(
+                caches.match(event.request).then((cached) => {
+                  const networkFetch = fetch(event.request).then((res) => {
+                    if (res && res.status === 200 && res.type === 'basic') {
+                      const clone = res.clone();
+                      caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+                    }
+                    return res;
+                  }).catch(() => cached);
+                  return cached || networkFetch;
+                })
+              );
+            });
+          `;
 
-  /* ================= ELEMENTOS ================= */
-  const video = $("input-video");
-  const canvas = $("output-canvas");
-  const ctx = canvas.getContext("2d");
-  const statusText = $("status-text");
-  const statusDot = $("status-dot");
-  const btnToggle = $("btn-toggle");
-  const btnRetry = $("btn-retry");
-  const btnRef = $("btn-ref");
-  const toastEl = $("toast");
+          try {
+            // Tenta registrar arquivo sw.js se hospedado, ou fallback via Blob URL
+            const swBlob = new Blob([swCode], { type: 'application/javascript' });
+            const swUrl = URL.createObjectURL(swBlob);
+            await navigator.serviceWorker.register(swUrl);
+            offlineBadge.textContent = '• PWA Offline Ativo';
+          } catch (_) {
+            // Fallback: Cache API direto da página atual para persistência offline
+            if ('caches' in window) {
+              try {
+                const cache = await caches.open(`shelfguard-pwa-v${APP_VERSION}`);
+                await cache.add(location.href);
+                offlineBadge.textContent = '• Cache Offline Ativo';
+              } catch (e) {
+                offlineBadge.textContent = '• Pronto';
+              }
+            }
+          }
+        },
 
-  // Melhoria 4: Único canvas de análise reutilizado para movimento e pós-ação (zero alocação extra)
-  const motionCanvas = document.createElement("canvas");
-  const motionCtx = motionCanvas.getContext("2d", { willReadFrequently: true });
+        bindInstallPrompt() {
+          const btnInstall = document.getElementById('btnInstallPwa');
+          window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            this.deferredPrompt = e;
+            btnInstall.style.display = 'inline-flex';
+          });
 
-  // Canvases de captura bruta (0..4 = burst; 5 = foto DEPOIS com destaque)
-  const capturaCanvases = Array.from({ length: 6 }, () => document.createElement("canvas"));
-  const capturaCtxs = capturaCanvases.map(c => c.getContext("2d"));
+          btnInstall.addEventListener('click', async () => {
+            if (!this.deferredPrompt) return;
+            this.deferredPrompt.prompt();
+            const choice = await this.deferredPrompt.userChoice;
+            if (choice.outcome === 'accepted') {
+              btnInstall.style.display = 'none';
+            }
+            this.deferredPrompt = null;
+          });
 
-  let baseMesaLuma = null;
-  let baseMesaDim = { sx: 0, sy: 0, bw: 0, bh: 0, mw: 0, mh: 0 };
-
-  let isRunning = false;
-  let capturando = false;
-  let cooldownAte = 0;
-  const emCooldown = () => performance.now() < cooldownAte;
-
-  function setStatus(texto, classe) {
-    statusText.textContent = texto;
-    statusText.parentElement.title = texto;
-    statusDot.className = "indicator" + (classe ? " " + classe : "");
-  }
-  let toastTimer = null;
-  function toast(msg, ms = 4500) {
-    toastEl.textContent = msg;
-    toastEl.classList.add("show");
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toastEl.classList.remove("show"), ms);
-  }
-
-  /* ================= BANCO LOCAL (IndexedDB) ================= */
-  let db = null;
-  function initDB() {
-    return new Promise((resolve) => {
-      if (!window.indexedDB) { resolve(false); return; }
-      let req;
-      try { req = indexedDB.open(CONFIG.db.nome, CONFIG.db.versao); }
-      catch (e) { resolve(false); return; }
-      req.onupgradeneeded = (e) => {
-        const d = e.target.result;
-        if (!d.objectStoreNames.contains(CONFIG.db.store)) {
-          d.createObjectStore(CONFIG.db.store, { keyPath: "id", autoIncrement: true });
+          window.addEventListener('appinstalled', () => {
+            btnInstall.style.display = 'none';
+            this.deferredPrompt = null;
+          });
         }
       };
-      req.onsuccess = (e) => {
-        db = e.target.result;
-        db.onversionchange = () => { db.close(); db = null; };
-        db.onclose = () => { db = null; };
-        resolve(true);
-      };
-      req.onerror = () => resolve(false);
-    });
-  }
-  function executarTx(modo, operacao) {
-    return new Promise((resolve, reject) => {
-      if (!db) { reject(new Error("Banco de dados indisponível")); return; }
-      let resultado;
-      let tx;
-      try {
-        tx = db.transaction(CONFIG.db.store, modo);
-        const req = operacao(tx.objectStore(CONFIG.db.store));
-        if (req) req.onsuccess = () => { resultado = req.result; };
-      } catch (e) { reject(e); return; }
-      tx.oncomplete = () => resolve(resultado);
-      tx.onerror = () => reject(tx.error || new Error("Erro na transação"));
-      tx.onabort = () => reject(tx.error || new Error("Transação cancelada"));
-    });
-  }
-  async function salvarEvento(evento) {
-    if (!db) await initDB();
-    await executarTx("readwrite", (s) => s.add(evento));
-  }
-  async function obterEventos() {
-    if (!db) await initDB();
-    return (await executarTx("readonly", (s) => s.getAll())) || [];
-  }
-  async function limparEventos() {
-    await executarTx("readwrite", (s) => s.clear());
-  }
-  function mensagemErroDB(e) {
-    if (e && e.name === "QuotaExceededError") return "Armazenamento cheio. Apague registros antigos na galeria.";
-    return "Não foi possível acessar o armazenamento do navegador.";
-  }
 
-  /* ================= CÂMERA ================= */
-  let stream = null;
-  let cameraPronta = false;
-  let cameraToken = 0;
-
-  function pararStream() {
-    if (stream) { stream.getTracks().forEach(t => { t.onended = null; t.stop(); }); stream = null; }
-    video.srcObject = null;
-  }
-
-  function aguardarVideoPronto() {
-    return new Promise((resolve, reject) => {
-      const eventos = ["loadeddata", "playing", "resize"];
-      const limpar = () => { clearTimeout(timer); eventos.forEach(ev => video.removeEventListener(ev, checar)); };
-      const checar = () => { if (video.videoWidth > 0 && video.readyState >= 2) { limpar(); resolve(); } };
-      const timer = setTimeout(() => {
-        limpar();
-        reject(Object.assign(new Error("O vídeo não iniciou"), { name: "VideoTimeout" }));
-      }, CONFIG.camera.timeoutProntaMs);
-      eventos.forEach(ev => video.addEventListener(ev, checar));
-      const p = video.play();
-      if (p && p.catch) p.catch((e) => { limpar(); reject(e); });
-      checar();
-    });
-  }
-
-  function descreverErroCamera(e) {
-    const n = e && e.name;
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      return { curto: "Câmera indisponível", longo: "O navegador não liberou a câmera. Abra a página por HTTPS." };
-    }
-    if (n === "NotAllowedError" || n === "SecurityError" || n === "PermissionDeniedError") {
-      return { curto: "Permissão negada", longo: "Permissão da câmera negada. Libere o acesso nas configurações do navegador e toque em 🔄 Câmera." };
-    }
-    if (n === "NotFoundError" || n === "DevicesNotFoundError" || n === "OverconstrainedError") {
-      return { curto: "Nenhuma câmera", longo: "Nenhuma câmera encontrada neste dispositivo." };
-    }
-    if (n === "NotReadableError" || n === "TrackStartError" || n === "AbortError") {
-      return { curto: "Câmera em uso", longo: "Não foi possível abrir a câmera. Ela pode estar em uso por outro aplicativo." };
-    }
-    if (n === "VideoTimeout") {
-      return { curto: "Câmera sem imagem", longo: "A câmera abriu, mas não enviou imagem. Toque em 🔄 Câmera para tentar de novo." };
-    }
-    return { curto: "Erro na câmera", longo: "Falha ao iniciar a câmera. Toque em 🔄 Câmera para tentar de novo." };
-  }
-
-  function falhaDeCamera(e, token) {
-    if (token !== cameraToken) return;
-    cameraPronta = false;
-    pararMonitoramento();
-    pararStream();
-    desenharOverlay();
-    const d = descreverErroCamera(e);
-    setStatus(d.curto, "alert");
-    toast(d.longo, 7000);
-    btnRetry.hidden = false;
-    console.warn("Câmera:", e);
-  }
-
-  const gUM = (video) => navigator.mediaDevices.getUserMedia({ video, audio: false });
-
-  async function iniciarCamera() {
-    const token = ++cameraToken;
-    pararMonitoramento();
-    pararStream();
-    cameraPronta = false;
-    btnRetry.hidden = true;
-    desenharOverlay();
-    setStatus("Iniciando câmera...", "");
-
-    try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("sem mediaDevices");
-      let s;
-      try {
-        s = await gUM({
-          facingMode: { ideal: "environment" },
-          width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 30 }
-        });
-      } catch (e) {
-        if (e && e.name === "OverconstrainedError") s = await gUM(true);
-        else throw e;
-      }
-      if (token !== cameraToken) { s.getTracks().forEach(t => t.stop()); return; }
-      stream = s;
-
-      const track = s.getVideoTracks()[0];
-      try {
-        const cap = track.getCapabilities ? track.getCapabilities() : {};
-        const adv = {};
-        if (cap.focusMode && cap.focusMode.includes("continuous")) adv.focusMode = "continuous";
-        if (cap.exposureMode && cap.exposureMode.includes("continuous")) adv.exposureMode = "continuous";
-        if (Object.keys(adv).length > 0) await track.applyConstraints({ advanced: [adv] });
-      } catch (e) {}
-
-      track.onended = () => {
-        if (token !== cameraToken) return;
-        falhaDeCamera(Object.assign(new Error("track ended"), { name: "TrackEnded" }), token);
-        setStatus("Câmera desconectada", "alert");
-        toast("A câmera foi desconectada. Reconecte e toque em 🔄 Câmera.", 7000);
-      };
-      track.onmute = () => { if (token === cameraToken) setStatus("Câmera sem imagem...", "alert"); };
-      track.onunmute = () => {
-        if (token !== cameraToken) return;
-        resetarReferencia();
-        setStatus(isRunning ? "Monitorando prateleira..." : "Pronto.", isRunning ? "running" : "");
+      /* ========================================================================
+       * 1. MÓDULO DE CONFIGURAÇÕES
+       * ======================================================================== */
+      const DEFAULT_CONFIG = {
+        cameraDeviceId: '',
+        idleFps: 10,          // 5 a 30 FPS em vigília (economia de CPU)
+        sensitivity: 28,      // 10 a 80
+        postCheck: true,
+        mode: 'all',          // 'all' | 'strict'
+        diffThreshold: 22,    // 10 a 60 (%)
+        handWait: 2000,       // 500 a 4000 ms
+        burstCount: 3,        // 1 a 5
+        burstInterval: 80,    // 40 a 600 ms
+        cooldown: 1500,       // 500 a 5000 ms
+        roi: { x: 20, y: 22, w: 60, h: 55 }
       };
 
-      video.srcObject = s;
-      await aguardarVideoPronto();
-      if (token !== cameraToken) return;
+      const ConfigStore = {
+        data: structuredClone(DEFAULT_CONFIG),
 
-      cameraPronta = true;
-      resetarReferencia();
-      desenharOverlay();
-      setStatus("Pronto. Arraste as bordas/bolinhas para ajustar.", "");
-    } catch (e) {
-      falhaDeCamera(e, token);
-    }
-  }
+        load() {
+          try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              this.data = {
+                ...structuredClone(DEFAULT_CONFIG),
+                ...parsed,
+                roi: { ...DEFAULT_CONFIG.roi, ...(parsed.roi || {}) }
+              };
+            }
+          } catch (err) {
+            console.warn('Falha ao restaurar configurações:', err);
+          }
+          this.normalizeRoi();
+          return this.data;
+        },
 
-  /* ================= DETECÇÃO DE MOVIMENTO E REFERÊNCIA DA MESA ================= */
-  // Melhoria 2 & 4: Lê da GPU (getImageData) APENAS o recorte da caixa delimitadora e reutiliza buffers
-  let prevLuma = null, currLuma = null;
-  const histDiff = new Uint32Array(511);
-  let celAlteradas = new Uint16Array(CONFIG.deteccao.grade ** 2);
-  let celTotais = new Uint16Array(CONFIG.deteccao.grade ** 2);
-  let ultimaAnalise = { razao: 0, celulas: 0, offset: 0 };
+        save() {
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
+          } catch (err) {
+            console.warn('Falha ao persistir configurações:', err);
+          }
+        },
 
-  function resetarReferencia() { prevLuma = null; }
+        reset() {
+          this.data = structuredClone(DEFAULT_CONFIG);
+          this.save();
+          return this.data;
+        },
 
-  // Extrai a luminância APENAS do retângulo da caixa delimitadora para um buffer destino
-  function extrairLumaCaixa(destBuffer) {
-    const vw = video.videoWidth, vh = video.videoHeight;
-    if (!vw || !vh || video.readyState < 2) return null;
-
-    const D = CONFIG.deteccao;
-    const mw = D.larguraAnalise;
-    const mh = Math.max(1, Math.round(mw * vh / vw));
-    if (motionCanvas.width !== mw || motionCanvas.height !== mh) {
-      motionCanvas.width = mw;
-      motionCanvas.height = mh;
-      prevLuma = null;
-      currLuma = null;
-    }
-
-    const sx = Math.floor(mw * caixa.x);
-    const ex = Math.min(mw, Math.ceil(mw * (caixa.x + caixa.w)));
-    const sy = Math.floor(mh * caixa.y);
-    const ey = Math.min(mh, Math.ceil(mh * (caixa.y + caixa.h)));
-    const bw = ex - sx, bh = ey - sy;
-    if (bw < 2 || bh < 2) return null;
-
-    motionCtx.drawImage(video, 0, 0, mw, mh);
-    // Melhoria 2: Transfere da GPU apenas os pixels de dentro da caixa (60% a 80% menos dados)
-    const data = motionCtx.getImageData(sx, sy, bw, bh).data;
-    const n = bw * bh;
-
-    let buf = destBuffer;
-    if (!buf || buf.length !== n) buf = new Uint8Array(n);
-    for (let i = 0, p = 0; i < n; i++, p += 4) {
-      buf[i] = (data[p] * 77 + data[p + 1] * 150 + data[p + 2] * 29) >> 8;
-    }
-    return { buf, sx, sy, bw, bh, mw, mh, n };
-  }
-
-  function capturarBaseMesa() {
-    // Melhoria 4: Se já temos o último frame analisado (prevLuma) com as mesmas dimensões, copia direto sem redesenhar
-    const vw = video.videoWidth, vh = video.videoHeight;
-    if (!vw || !vh || video.readyState < 2) return false;
-    const res = extrairLumaCaixa(baseMesaLuma);
-    if (!res) return false;
-    baseMesaLuma = res.buf;
-    baseMesaDim = { sx: res.sx, sy: res.sy, bw: res.bw, bh: res.bh, mw: res.mw, mh: res.mh };
-    return true;
-  }
-
-  function verificarMudancaMesa() {
-    if (!baseMesaLuma) return { retirado: false, mudancaPct: 0, bbox: null };
-
-    // Melhoria 4: Reutiliza o buffer prevLuma que já foi atualizado pelo loop de vídeo (zero novo canvas / zero novo Uint8Array)
-    const D = CONFIG.deteccao;
-    const { sx, sy, bw, bh, mw, mh } = baseMesaDim;
-    const n = bw * bh;
-
-    // Garante leitura fresca usando o próprio currLuma pré-alocado
-    const res = extrairLumaCaixa(currLuma);
-    if (!res || res.n !== baseMesaLuma.length || res.bw !== bw || res.bh !== bh) {
-      capturarBaseMesa();
-      return { retirado: false, mudancaPct: 0, bbox: null };
-    }
-    currLuma = res.buf;
-    const posLuma = currLuma;
-
-    // 1) Desconta variação global de luz entre o Antes e o Depois usando mediana
-    histDiff.fill(0);
-    let amostras = 0;
-    for (let y = 0; y < bh; y += 2) {
-      const row = y * bw;
-      for (let x = 0; x < bw; x += 2) {
-        histDiff[posLuma[row + x] - baseMesaLuma[row + x] + 255]++;
-        amostras++;
-      }
-    }
-    let acum = 0, mediana = 0;
-    const metade = amostras >> 1;
-    for (let k = 0; k < 511; k++) {
-      acum += histDiff[k];
-      if (acum > metade) { mediana = k - 255; break; }
-    }
-    const offset = clamp(mediana, -D.offsetLuzMax, D.offsetLuzMax);
-
-    // 2) Localiza os pixels alterados dentro da caixa
-    const limiar = estado.itemDiff;
-    let mudados = 0;
-    let minX = bw, maxX = 0, minY = bh, maxY = 0;
-
-    for (let y = 0; y < bh; y++) {
-      const row = y * bw;
-      for (let x = 0; x < bw; x++) {
-        const d = Math.abs(posLuma[row + x] - baseMesaLuma[row + x] - offset);
-        if (d > limiar) {
-          mudados++;
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
-          if (y < minY) minY = y;
-          if (y > maxY) maxY = y;
+        normalizeRoi() {
+          const r = this.data.roi;
+          r.w = Math.max(10, Math.min(100, Math.round(r.w)));
+          r.h = Math.max(10, Math.min(100, Math.round(r.h)));
+          r.x = Math.max(0, Math.min(100 - r.w, Math.round(r.x)));
+          r.y = Math.max(0, Math.min(100 - r.h, Math.round(r.y)));
         }
-      }
-    }
-
-    const razao = mudados / n;
-    const retirado = razao >= D.itemAreaMinima && razao <= D.razaoMaxima;
-
-    let bbox = null;
-    if (retirado && maxX >= minX && maxY >= minY) {
-      bbox = {
-        x: (sx + minX) / mw,
-        y: (sy + minY) / mh,
-        w: Math.max(0.04, (maxX - minX + 1) / mw),
-        h: Math.max(0.04, (maxY - minY + 1) / mh)
       };
-      baseMesaLuma.set(posLuma);
-    }
 
-    return { retirado, mudancaPct: razao * 100, bbox };
-  }
+      /* ========================================================================
+       * 2. MÓDULO DE ARMAZENAMENTO (IndexedDB com Blobs Full + Miniaturas Leves)
+       * ======================================================================== */
+      const DBStore = {
+        DB_NAME: 'ShelfGuardDB_v2',
+        DB_VERSION: 1,
+        STORE_NAME: 'events',
+        db: null,
 
-  function analisarFrame() {
-    const D = CONFIG.deteccao;
-    const res = extrairLumaCaixa(currLuma);
-    if (!res) return null;
+        async init() {
+          if (navigator.storage && navigator.storage.persist) {
+            try { await navigator.storage.persist(); } catch (_) {}
+          }
 
-    currLuma = res.buf;
-    const { bw, bh, n } = res;
+          return new Promise((resolve, reject) => {
+            const req = indexedDB.open(this.DB_NAME, this.DB_VERSION);
+            req.onupgradeneeded = (e) => {
+              const db = e.target.result;
+              if (!db.objectStoreNames.contains(this.STORE_NAME)) {
+                const store = db.createObjectStore(this.STORE_NAME, {
+                  keyPath: 'id',
+                  autoIncrement: true
+                });
+                store.createIndex('timestamp', 'timestamp', { unique: false });
+              }
+            };
+            req.onsuccess = () => {
+              this.db = req.result;
+              resolve();
+            };
+            req.onerror = () => reject(new Error('Falha na inicialização do armazenamento local (IndexedDB).'));
+          });
+        },
 
-    const novo = currLuma, antigo = prevLuma;
-    prevLuma = novo; currLuma = antigo;
-    if (!antigo || antigo.length !== n) return null;
+        async addEvent(eventRecord) {
+          if (!this.db) await this.init();
+          return new Promise((resolve, reject) => {
+            try {
+              const tx = this.db.transaction(this.STORE_NAME, 'readwrite');
+              const store = tx.objectStore(this.STORE_NAME);
+              const req = store.add(eventRecord);
+              req.onsuccess = () => resolve(req.result);
+              req.onerror = (e) => {
+                const err = e.target.error;
+                if (err && err.name === 'QuotaExceededError') {
+                  reject(new Error('Armazenamento cheio. Limpe registros antigos na galeria.'));
+                } else {
+                  reject(new Error('Falha ao salvar registro no armazenamento local.'));
+                }
+              };
+            } catch (err) {
+              reject(new Error('Erro crítico de armazenamento local.'));
+            }
+          });
+        },
 
-    // 1) Mediana da variação de iluminação dentro da caixa
-    histDiff.fill(0);
-    let amostras = 0;
-    for (let y = 0; y < bh; y += 2) {
-      const row = y * bw;
-      for (let x = 0; x < bw; x += 2) {
-        histDiff[novo[row + x] - antigo[row + x] + 255]++;
-        amostras++;
-      }
-    }
-    let acum = 0, mediana = 0;
-    const metade = amostras >> 1;
-    for (let k = 0; k < 511; k++) {
-      acum += histDiff[k];
-      if (acum > metade) { mediana = k - 255; break; }
-    }
-    const offset = clamp(mediana, -D.offsetLuzMax, D.offsetLuzMax);
+        async countEvents() {
+          if (!this.db) await this.init();
+          return new Promise((resolve) => {
+            const tx = this.db.transaction(this.STORE_NAME, 'readonly');
+            const req = tx.objectStore(this.STORE_NAME).count();
+            req.onsuccess = () => resolve(req.result || 0);
+            req.onerror = () => resolve(0);
+          });
+        },
 
-    // 2) Conta pixels alterados no total e por célula da grade
-    const G = D.grade;
-    celAlteradas.fill(0); celTotais.fill(0);
-    const sens = estado.sensibilidade;
-    let mudados = 0;
-    for (let y = 0; y < bh; y++) {
-      const row = y * bw;
-      const gy = Math.min(G - 1, (y * G / bh) | 0) * G;
-      for (let x = 0; x < bw; x++) {
-        const idx = gy + Math.min(G - 1, (x * G / bw) | 0);
-        celTotais[idx]++;
-        const d = novo[row + x] - antigo[row + x] - offset;
-        if (d > sens || d < -sens) { mudados++; celAlteradas[idx]++; }
-      }
-    }
+        async getEventsPage(offset = 0, limit = 20) {
+          if (!this.db) await this.init();
+          return new Promise((resolve, reject) => {
+            const tx = this.db.transaction(this.STORE_NAME, 'readonly');
+            const index = tx.objectStore(this.STORE_NAME).index('timestamp');
+            const results = [];
+            let skipped = 0;
 
-    const razao = mudados / n;
-    let celulas = 0;
-    for (let k = 0; k < G * G; k++) {
-      if (celTotais[k] > 0 && celAlteradas[k] / celTotais[k] >= D.razaoCelulaMinima) celulas++;
-    }
-    ultimaAnalise = { razao, celulas, offset };
-    if (DEBUG) desenharOverlay();
+            const cursorReq = index.openCursor(null, 'prev');
+            cursorReq.onsuccess = (e) => {
+              const cursor = e.target.result;
+              if (!cursor || results.length >= limit) {
+                resolve(results);
+                return;
+              }
+              if (skipped < offset) {
+                skipped++;
+                cursor.continue();
+                return;
+              }
+              results.push(cursor.value);
+              cursor.continue();
+            };
+            cursorReq.onerror = () => reject(new Error('Falha ao ler registros da galeria.'));
+          });
+        },
 
-    return {
-      movimento: razao >= D.razaoMinima && razao <= D.razaoMaxima && celulas >= D.celulasMinimas
-    };
-  }
-
-  /* ================= CICLO DE DETECÇÃO ================= */
-  const temRVFC = typeof HTMLVideoElement !== "undefined" && "requestVideoFrameCallback" in HTMLVideoElement.prototype;
-  let usarRVFC = temRVFC;
-  let deteccaoToken = 0;
-  let deteccaoHandle = null;
-  let deteccaoModo = null;
-  let ultimoTempoVideo = -1;
-  let ultimoProcessamento = 0;
-
-  function cancelarHandle(handle, modo) {
-    if (handle === null) return;
-    if (modo === "rvfc" && video.cancelVideoFrameCallback) video.cancelVideoFrameCallback(handle);
-    else if (modo === "raf") cancelAnimationFrame(handle);
-  }
-  function pararDeteccao() {
-    deteccaoToken++;
-    cancelarHandle(deteccaoHandle, deteccaoModo);
-    deteccaoHandle = null;
-  }
-  function iniciarDeteccao() {
-    pararDeteccao();
-    const token = deteccaoToken;
-    ultimoTempoVideo = -1;
-    ultimoProcessamento = performance.now();
-    agendarDeteccao(token);
-  }
-  function agendarDeteccao(token) {
-    if (token !== deteccaoToken) return;
-    if (usarRVFC) {
-      deteccaoModo = "rvfc";
-      deteccaoHandle = video.requestVideoFrameCallback(() => { deteccaoHandle = null; processarFrame(token); });
-    } else {
-      deteccaoModo = "raf";
-      deteccaoHandle = requestAnimationFrame(() => {
-        deteccaoHandle = null;
-        if (token !== deteccaoToken) return;
-        if (video.currentTime !== ultimoTempoVideo) {
-          ultimoTempoVideo = video.currentTime;
-          processarFrame(token);
-        } else {
-          agendarDeteccao(token);
+        async clearAll() {
+          if (!this.db) await this.init();
+          return new Promise((resolve, reject) => {
+            const tx = this.db.transaction(this.STORE_NAME, 'readwrite');
+            const req = tx.objectStore(this.STORE_NAME).clear();
+            req.onsuccess = () => resolve();
+            req.onerror = () => reject(new Error('Falha ao limpar registros.'));
+          });
         }
-      });
-    }
-  }
-  function processarFrame(token) {
-    if (token !== deteccaoToken || !isRunning) return;
-    ultimoProcessamento = performance.now();
-    try {
-      const r = analisarFrame();
-      if (r && r.movimento && !capturando && !emCooldown()) dispararCaptura();
-    } catch (e) { console.error("Erro na detecção:", e); }
-    agendarDeteccao(token);
-  }
-  setInterval(() => {
-    if (!isRunning || !cameraPronta || document.hidden || !usarRVFC) return;
-    if (performance.now() - ultimoProcessamento > CONFIG.camera.watchdogMs) {
-      console.warn("rVFC sem resposta; usando requestAnimationFrame.");
-      usarRVFC = false;
-      iniciarDeteccao();
-    }
-  }, 1000);
-
-  function esperarFrameNovo() {
-    return new Promise((resolve) => {
-      let feito = false, handle = null;
-      const modo = usarRVFC ? "rvfc" : "raf";
-      const fim = (ok) => {
-        if (feito) return;
-        feito = true; clearTimeout(timer);
-        cancelarHandle(handle, modo);
-        resolve(ok);
       };
-      const timer = setTimeout(() => fim(false), CONFIG.captura.timeoutFrameMs);
-      if (modo === "rvfc") {
-        handle = video.requestVideoFrameCallback(() => { handle = null; fim(true); });
-      } else {
-        const tempo = video.currentTime;
-        const tick = () => {
-          if (feito) return;
-          if (video.currentTime !== tempo) fim(true);
-          else handle = requestAnimationFrame(tick);
-        };
-        handle = requestAnimationFrame(tick);
-      }
-    });
-  }
 
-  /* ================= CAPTURA E CHECAGEM PÓS-AÇÃO ================= */
-  function capturarFrame(i) {
-    const w = video.videoWidth, h = video.videoHeight;
-    const c = capturaCanvases[i];
-    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
-    capturaCtxs[i].drawImage(video, 0, 0, w, h);
-  }
-  function desenharDestaqueRetirada(idxCanvas, bbox) {
-    if (!bbox) return;
-    const c = capturaCanvases[idxCanvas];
-    const k = capturaCtxs[idxCanvas];
-    const rx = c.width * bbox.x, ry = c.height * bbox.y;
-    const rw = c.width * bbox.w, rh = c.height * bbox.h;
-    k.save();
-    k.strokeStyle = "#ffeb3b";
-    k.lineWidth = Math.max(3, Math.round(c.width * 0.004));
-    k.strokeRect(rx, ry, rw, rh);
-    k.fillStyle = "rgba(255, 235, 59, 0.22)";
-    k.fillRect(rx, ry, rw, rh);
-    k.font = "bold 15px sans-serif";
-    k.fillStyle = "#ffeb3b";
-    k.fillText("🛒 LOCAL ALTERADO", rx + 4, Math.max(18, ry - 6));
-    k.restore();
-  }
-  function canvasParaBlob(c) {
-    return new Promise((resolve, reject) => {
-      c.toBlob((b) => b ? resolve(b) : reject(new Error("Falha ao gerar imagem")),
-        "image/jpeg", CONFIG.captura.qualidadeJpeg);
-    });
-  }
+      /* ========================================================================
+       * 3. WEB WORKER DE VISÃO COMPUTACIONAL (Zero-Copy Ping-Pong + Uint32Array)
+       * ======================================================================== */
+      const VisionEngine = {
+        worker: null,
+        hasBaseline: false,
+        pendingResolve: null,
+        useFallbackMainThread: false,
 
-  let timerStatus = null;
-  function restaurarStatusMonitorando() {
-    clearTimeout(timerStatus);
-    const resta = cooldownAte - performance.now();
-    timerStatus = setTimeout(() => {
-      if (isRunning && !capturando && cameraPronta) setStatus("Monitorando prateleira...", "running");
-    }, Math.max(0, resta) + 50);
-  }
+        // Canvas de extração rápida da ROI (max 160px para reduzir 55% dos pixels)
+        roiCanvas: document.createElement('canvas'),
+        roiCtx: null,
 
-  async function dispararCaptura() {
-    capturando = true;
-    const n = estado.burstCount, intervalo = estado.burstInterval;
-    const timestamp = new Date().toLocaleString("pt-BR");
-    const t0 = performance.now();
-    let capturadas = 0;
-    try {
-      capturarFrame(0); capturadas = 1;
+        // Canvas dedicado para codificação JPEG assíncrona (pós-burst) e miniaturas
+        encodeCanvas: document.createElement('canvas'),
+        encodeCtx: null,
+        thumbCanvas: document.createElement('canvas'),
+        thumbCtx: null,
 
-      const flash = $("flash-overlay");
-      flash.style.opacity = "0.7";
-      setTimeout(() => flash.style.opacity = "0", 120);
-      setStatus("🚨 Capturando...", "alert");
+        init() {
+          this.roiCtx = this.roiCanvas.getContext('2d', { willReadFrequently: true });
+          this.encodeCtx = this.encodeCanvas.getContext('2d', { willReadFrequently: false });
+          this.thumbCtx = this.thumbCanvas.getContext('2d', { willReadFrequently: false });
 
-      for (let i = 1; i < n; i++) {
-        const espera = t0 + i * intervalo - performance.now();
-        if (espera > 0) await sleep(espera);
-        if (!(await esperarFrameNovo())) break;
-        capturarFrame(i); capturadas++;
-      }
+          const workerSource = `
+            'use strict';
+            let procW = 0;
+            let procH = 0;
+            let prevLuma = null;
+            let currLuma = null;
+            let baseLuma = null;
+            let diffBuffer = null;
+            const histBuffer = new Int32Array(512);
 
-      let itemRetirado = null;
-      let mudancaPct = 0;
-      let temFotoDepois = false;
+            function ensureBuffers(pw, ph) {
+              if (procW !== pw || procH !== ph) {
+                procW = pw;
+                procH = ph;
+                const len = pw * ph;
+                prevLuma = null;
+                baseLuma = null;
+                currLuma = new Uint8Array(len);
+                diffBuffer = new Int16Array(len);
+              }
+            }
 
-      if (estado.posAcaoAtiva && baseMesaLuma) {
-        setStatus("🔍 Verificando mesa...", "alert");
-        const D = CONFIG.deteccao;
-        const maxTentativas = Math.max(1, Math.round(estado.posDelayMs / D.estabilizacaoIntervaloMs));
-        for (let tent = 0; tent < maxTentativas; tent++) {
-          await sleep(D.estabilizacaoIntervaloMs);
-          if (!isRunning) break;
-          if (tent >= 1 && ultimaAnalise.razao < D.razaoMinima) break;
+            // Leitura vetorizada via Uint32Array (4 canais RGBA por ciclo)
+            function extractLumaFromRGBA(rgbaBuffer, len) {
+              const pixels32 = new Uint32Array(rgbaBuffer);
+              for (let i = 0; i < len; i++) {
+                const px = pixels32[i];
+                const r = px & 0xff;
+                const g = (px >>> 8) & 0xff;
+                const b = (px >>> 16) & 0xff;
+                currLuma[i] = (77 * r + 150 * g + 29 * b) >> 8;
+              }
+            }
+
+            // Mediana O(N) via histograma
+            function computeMedianDiff(a, b, len) {
+              histBuffer.fill(0);
+              for (let i = 0; i < len; i++) {
+                const d = a[i] - b[i];
+                diffBuffer[i] = d;
+                histBuffer[d + 255]++;
+              }
+              const mid = len >> 1;
+              let acc = 0;
+              for (let i = 0; i < 512; i++) {
+                acc += histBuffer[i];
+                if (acc >= mid) return i - 255;
+              }
+              return 0;
+            }
+
+            self.onmessage = (e) => {
+              const msg = e.data;
+
+              if (msg.type === 'reset') {
+                prevLuma = null;
+                baseLuma = null;
+                self.postMessage({ id: msg.id, ok: true });
+                return;
+              }
+
+              const { pw, ph, buffer } = msg;
+              const len = pw * ph;
+              ensureBuffers(pw, ph);
+              extractLumaFromRGBA(buffer, len);
+
+              if (msg.type === 'setBase') {
+                baseLuma = new Uint8Array(len);
+                baseLuma.set(currLuma);
+                prevLuma = new Uint8Array(len);
+                prevLuma.set(currLuma);
+                self.postMessage({ id: msg.id, ok: true });
+                return;
+              }
+
+              if (msg.type === 'syncPrev') {
+                if (!prevLuma || prevLuma.length !== len) prevLuma = new Uint8Array(len);
+                prevLuma.set(currLuma);
+                self.postMessage({ id: msg.id, ok: true });
+                return;
+              }
+
+              if (msg.type === 'detectMotion') {
+                if (!prevLuma || prevLuma.length !== len) {
+                  prevLuma = new Uint8Array(len);
+                  prevLuma.set(currLuma);
+                  self.postMessage({ id: msg.id, detected: false });
+                  return;
+                }
+
+                const medianShift = computeMedianDiff(currLuma, prevLuma, len);
+
+                // Zero-Copy Ping-Pong swap de ponteiros O(1)
+                const tmp = prevLuma;
+                prevLuma = currLuma;
+                currLuma = tmp;
+
+                if (Math.abs(medianShift) > 65) {
+                  self.postMessage({ id: msg.id, detected: false });
+                  return;
+                }
+
+                const pixelThreshold = Math.max(12, Math.round(70 - msg.sensitivity * 0.72));
+                const gridCols = 5;
+                const gridRows = 5;
+                let activeCells = 0;
+                let totalChangedPixels = 0;
+
+                for (let gy = 0; gy < gridRows; gy++) {
+                  const y0 = Math.floor((gy * ph) / gridRows);
+                  const y1 = Math.floor(((gy + 1) * ph) / gridRows);
+                  for (let gx = 0; gx < gridCols; gx++) {
+                    const x0 = Math.floor((gx * pw) / gridCols);
+                    const x1 = Math.floor(((gx + 1) * pw) / gridCols);
+
+                    let cellChanged = 0;
+                    let cellTotal = 0;
+
+                    for (let y = y0; y < y1; y++) {
+                      const rowOffset = y * pw;
+                      for (let x = x0; x < x1; x++) {
+                        const idx = rowOffset + x;
+                        if (Math.abs(diffBuffer[idx] - medianShift) > pixelThreshold) {
+                          cellChanged++;
+                        }
+                        cellTotal++;
+                      }
+                    }
+
+                    totalChangedPixels += cellChanged;
+                    if (cellTotal > 0 && (cellChanged / cellTotal) >= 0.12) {
+                      activeCells++;
+                    }
+                  }
+                }
+
+                const totalRatio = totalChangedPixels / len;
+                const detected = activeCells >= 2 && totalRatio >= 0.015 && totalRatio <= 0.92;
+                self.postMessage({ id: msg.id, detected, activeCells, totalRatio });
+                return;
+              }
+
+              if (msg.type === 'evaluateWithdrawal') {
+                if (!baseLuma || baseLuma.length !== len) {
+                  self.postMessage({ id: msg.id, hasBaseline: false, isWithdrawal: false, changePercent: 0, box: null });
+                  return;
+                }
+
+                const medianShift = computeMedianDiff(currLuma, baseLuma, len);
+                const pixelDiffThreshold = 26;
+                let changedCount = 0;
+                const colHits = new Uint16Array(pw);
+                const rowHits = new Uint16Array(ph);
+
+                for (let y = 0; y < ph; y++) {
+                  const rowOffset = y * pw;
+                  for (let x = 0; x < pw; x++) {
+                    const idx = rowOffset + x;
+                    if (Math.abs(diffBuffer[idx] - medianShift) > pixelDiffThreshold) {
+                      changedCount++;
+                      colHits[x]++;
+                      rowHits[y]++;
+                    }
+                  }
+                }
+
+                const changePercent = Number(((changedCount / len) * 100).toFixed(1));
+                const isWithdrawal = changePercent >= msg.diffThreshold;
+                let box = null;
+
+                if (isWithdrawal && changedCount > 0) {
+                  let minX = pw, minY = ph, maxX = 0, maxY = 0;
+                  const minColSupport = Math.max(2, Math.floor(ph * 0.05));
+                  const minRowSupport = Math.max(2, Math.floor(pw * 0.05));
+
+                  for (let x = 0; x < pw; x++) {
+                    if (colHits[x] >= minColSupport) {
+                      if (x < minX) minX = x;
+                      if (x > maxX) maxX = x;
+                    }
+                  }
+                  for (let y = 0; y < ph; y++) {
+                    if (rowHits[y] >= minRowSupport) {
+                      if (y < minY) minY = y;
+                      if (y > maxY) maxY = y;
+                    }
+                  }
+
+                  if (maxX > minX && maxY > minY) {
+                    box = {
+                      rx: minX / pw,
+                      ry: minY / ph,
+                      rw: (maxX - minX) / pw,
+                      rh: (maxY - minY) / ph
+                    };
+                  }
+                }
+
+                self.postMessage({ id: msg.id, hasBaseline: true, isWithdrawal, changePercent, box });
+              }
+            };
+          `;
+
+          try {
+            const blob = new Blob([workerSource], { type: 'application/javascript' });
+            this.worker = new Worker(URL.createObjectURL(blob));
+            this.worker.onmessage = (e) => {
+              if (this.pendingResolve) {
+                const res = this.pendingResolve;
+                this.pendingResolve = null;
+                res(e.data);
+              }
+            };
+            document.getElementById('engineStatusText').textContent = 'Worker: Ativo';
+          } catch (err) {
+            console.warn('Web Worker indisponível, usando fallback:', err);
+            this.useFallbackMainThread = true;
+            document.getElementById('engineStatusText').textContent = 'Engine: Local';
+          }
+        },
+
+        getRoiVideoRect(video, roi) {
+          const vw = video.videoWidth || 960;
+          const vh = video.videoHeight || 540;
+          const sx = Math.floor((roi.x / 100) * vw);
+          const sy = Math.floor((roi.y / 100) * vh);
+          const sw = Math.max(16, Math.floor((roi.w / 100) * vw));
+          const sh = Math.max(16, Math.floor((roi.h / 100) * vh));
+          return { sx, sy, sw, sh, vw, vh };
+        },
+
+        /**
+         * Extrai recorte reduzido (max 160px) da ROI para envio zero-copy ao Worker
+         */
+        extractRoiBuffer(video, roi) {
+          const { sx, sy, sw, sh } = this.getRoiVideoRect(video, roi);
+          const maxDim = 160;
+          const scale = Math.min(1, maxDim / Math.max(sw, sh));
+          const pw = Math.max(20, Math.round(sw * scale));
+          const ph = Math.max(20, Math.round(sh * scale));
+
+          if (this.roiCanvas.width !== pw || this.roiCanvas.height !== ph) {
+            this.roiCanvas.width = pw;
+            this.roiCanvas.height = ph;
+          }
+
+          this.roiCtx.drawImage(video, sx, sy, sw, sh, 0, 0, pw, ph);
+          const imgData = this.roiCtx.getImageData(0, 0, pw, ph);
+          return { pw, ph, buffer: imgData.data.buffer };
+        },
+
+        sendToWorker(payload, transferList = []) {
+          if (!this.worker) return Promise.resolve({ detected: false });
+          return new Promise((resolve) => {
+            this.pendingResolve = resolve;
+            this.worker.postMessage(payload, transferList);
+          });
+        },
+
+        async resetBuffers() {
+          this.hasBaseline = false;
+          await this.sendToWorker({ type: 'reset' });
+        },
+
+        async captureBaseline(video, roi) {
+          const { pw, ph, buffer } = this.extractRoiBuffer(video, roi);
+          await this.sendToWorker({ type: 'setBase', pw, ph, buffer }, [buffer]);
+          this.hasBaseline = true;
+          return true;
+        },
+
+        async syncPrevFrame(video, roi) {
+          const { pw, ph, buffer } = this.extractRoiBuffer(video, roi);
+          await this.sendToWorker({ type: 'syncPrev', pw, ph, buffer }, [buffer]);
+        },
+
+        async detectMotion(video, roi, sensitivity) {
+          const { pw, ph, buffer } = this.extractRoiBuffer(video, roi);
+          return this.sendToWorker({ type: 'detectMotion', pw, ph, sensitivity, buffer }, [buffer]);
+        },
+
+        async evaluateWithdrawal(video, roi, diffThreshold) {
+          const { pw, ph, buffer } = this.extractRoiBuffer(video, roi);
+          return this.sendToWorker({ type: 'evaluateWithdrawal', pw, ph, diffThreshold, buffer }, [buffer]);
+        },
+
+        /**
+         * Etapa 1 do Pipeline Desacoplado:
+         * Captura instantaneamente o frame bruto em um canvas leve sem bloquear com toBlob()
+         */
+        grabRawFrameCanvas(video) {
+          const vw = video.videoWidth || 960;
+          const vh = video.videoHeight || 540;
+          const canvas = document.createElement('canvas');
+          canvas.width = vw;
+          canvas.height = vh;
+          const ctx = canvas.getContext('2d', { willReadFrequently: false });
+          ctx.drawImage(video, 0, 0, vw, vh);
+          return canvas;
+        },
+
+        /**
+         * Etapa 2 do Pipeline Desacoplado:
+         * Converte o canvas capturado em Blob Full-HD + Miniatura compacta (160x90)
+         * durante o tempo ocioso pós-rajada.
+         */
+        async encodeFrameWithThumbnail(rawCanvas, roi, annotation = null) {
+          const vw = rawCanvas.width;
+          const vh = rawCanvas.height;
+
+          if (this.encodeCanvas.width !== vw || this.encodeCanvas.height !== vh) {
+            this.encodeCanvas.width = vw;
+            this.encodeCanvas.height = vh;
+          }
+
+          const ctx = this.encodeCtx;
+          ctx.drawImage(rawCanvas, 0, 0, vw, vh);
+
+          // Desenha ROI e caixa amarela "LOCAL ALTERADO" se aplicável
+          const rx = (roi.x / 100) * vw;
+          const ry = (roi.y / 100) * vh;
+          const rw = (roi.w / 100) * vw;
+          const rh = (roi.h / 100) * vh;
+
+          ctx.save();
+          ctx.strokeStyle = 'rgba(239, 68, 68, 0.75)';
+          ctx.lineWidth = Math.max(2, Math.round(vw / 400));
+          ctx.strokeRect(rx, ry, rw, rh);
+
+          if (annotation && annotation.box) {
+            const ax = rx + annotation.box.rx * rw;
+            const ay = ry + annotation.box.ry * rh;
+            const aw = annotation.box.rw * rw;
+            const ah = annotation.box.rh * rh;
+
+            ctx.strokeStyle = '#eab308';
+            ctx.lineWidth = Math.max(3, Math.round(vw / 260));
+            ctx.strokeRect(ax, ay, aw, ah);
+
+            ctx.fillStyle = 'rgba(234, 179, 8, 0.22)';
+            ctx.fillRect(ax, ay, aw, ah);
+
+            const label = `LOCAL ALTERADO (${annotation.changePercent}%)`;
+            const fontSize = Math.max(13, Math.round(vw / 55));
+            ctx.font = `bold ${fontSize}px sans-serif`;
+            const textMetrics = ctx.measureText(label);
+            const padX = 8;
+            const boxH = fontSize + 10;
+            const labelY = Math.max(boxH, ay - 4);
+
+            ctx.fillStyle = '#eab308';
+            ctx.fillRect(ax, labelY - boxH, textMetrics.width + padX * 2, boxH);
+
+            ctx.fillStyle = '#000000';
+            ctx.fillText(label, ax + padX, labelY - 7);
+          }
+          ctx.restore();
+
+          // Gera miniatura leve (160x90) para evitar decodificação pesada na galeria
+          const tw = 160;
+          const th = Math.max(90, Math.round((vh / vw) * tw));
+          if (this.thumbCanvas.width !== tw || this.thumbCanvas.height !== th) {
+            this.thumbCanvas.width = tw;
+            this.thumbCanvas.height = th;
+          }
+          this.thumbCtx.drawImage(this.encodeCanvas, 0, 0, tw, th);
+
+          const [fullBlob, thumbBlob] = await Promise.all([
+            new Promise((resolve, reject) => {
+              this.encodeCanvas.toBlob(
+                (b) => (b ? resolve(b) : reject(new Error('Falha ao codificar JPEG.'))),
+                'image/jpeg',
+                JPEG_QUALITY
+              );
+            }),
+            new Promise((resolve) => {
+              this.thumbCanvas.toBlob((b) => resolve(b || null), 'image/jpeg', THUMB_QUALITY);
+            })
+          ]);
+
+          // Libera memória imediata do canvas temporário
+          rawCanvas.width = 0;
+          rawCanvas.height = 0;
+
+          return { blob: fullBlob, thumbBlob: thumbBlob || fullBlob };
         }
-        const check = verificarMudancaMesa();
-        itemRetirado = check.retirado;
-        mudancaPct = check.mudancaPct;
+      };
 
-        if (estado.modoItem === "estrito" && !itemRetirado) {
-          cooldownAte = performance.now() + estado.cooldownMs;
-          setStatus("👀 Só movimento (ignorado)", "running");
-          return;
+      /* ========================================================================
+       * 4. MÓDULO DE GERENCIAMENTO DA CÂMERA E WAKE LOCK
+       * ======================================================================== */
+      const CameraManager = {
+        video: document.getElementById('cameraVideo'),
+        stream: null,
+        wakeLock: null,
+        frameWatchdogTimer: null,
+        lastVideoTime: -1,
+
+        async populateDeviceList() {
+          if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+          try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoInputs = devices.filter((d) => d.kind === 'videoinput');
+            const select = document.getElementById('cfgCameraDevice');
+            const currentVal = ConfigStore.data.cameraDeviceId;
+
+            select.innerHTML = '<option value="">Padrão (Traseira Automática)</option>';
+            videoInputs.forEach((dev, idx) => {
+              const opt = document.createElement('option');
+              opt.value = dev.deviceId;
+              opt.textContent = dev.label || `Câmera ${idx + 1}`;
+              select.appendChild(opt);
+            });
+            select.value = currentVal;
+          } catch (_) {}
+        },
+
+        async start() {
+          this.stop();
+
+          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error('Navegador sem suporte à API de câmera ou página fora de HTTPS/localhost.');
+          }
+
+          const selectedId = ConfigStore.data.cameraDeviceId;
+          const videoConstraints = {
+            width: { ideal: 960 },
+            height: { ideal: 540 },
+            frameRate: { ideal: 30 }
+          };
+
+          if (selectedId) {
+            videoConstraints.deviceId = { exact: selectedId };
+          } else {
+            videoConstraints.facingMode = { ideal: 'environment' };
+          }
+
+          try {
+            this.stream = await navigator.mediaDevices.getUserMedia({
+              audio: false,
+              video: videoConstraints
+            });
+          } catch (err) {
+            if (err.name === 'OverconstrainedError' || err.name === 'ConstraintNotSatisfiedError') {
+              this.stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+            } else {
+              throw this.mapCameraError(err);
+            }
+          }
+
+          const track = this.stream.getVideoTracks()[0];
+          if (!track) {
+            throw new Error('Nenhuma trilha de vídeo disponível na câmera.');
+          }
+
+          track.onended = () => {
+            UI.showAlert('Câmera desconectada. Clique em "Câmera" para reconectar.');
+            UI.setCameraStatus('Desconectada', 'warn');
+            AppController.stopMonitoring();
+          };
+
+          this.video.srcObject = this.stream;
+
+          await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error('Tempo esgotado na inicialização do vídeo.')), 7000);
+            this.video.onloadedmetadata = () => {
+              clearTimeout(timeout);
+              this.video.play().then(resolve).catch(() => reject(new Error('Falha ao iniciar reprodução do vídeo.')));
+            };
+          });
+
+          await this.populateDeviceList();
+          this.startFrameHealthCheck();
+
+          return {
+            width: this.video.videoWidth,
+            height: this.video.videoHeight
+          };
+        },
+
+        stop() {
+          if (this.frameWatchdogTimer) {
+            clearInterval(this.frameWatchdogTimer);
+            this.frameWatchdogTimer = null;
+          }
+          if (this.stream) {
+            this.stream.getTracks().forEach((t) => t.stop());
+            this.stream = null;
+          }
+          this.video.srcObject = null;
+        },
+
+        startFrameHealthCheck() {
+          this.lastVideoTime = -1;
+          let stalledTicks = 0;
+          this.frameWatchdogTimer = setInterval(() => {
+            if (!this.stream || this.video.paused || this.video.ended) return;
+            if (this.video.currentTime === this.lastVideoTime) {
+              stalledTicks++;
+              if (stalledTicks >= 4) {
+                UI.setCameraStatus('Sem frames', 'warn');
+                UI.showAlert('Ausência de frames detectada na câmera. Tente reiniciar a câmera.');
+              }
+            } else {
+              if (stalledTicks >= 4) {
+                UI.hideAlert();
+                UI.setCameraStatus(`${this.video.videoWidth}x${this.video.videoHeight}`, 'ok');
+              }
+              stalledTicks = 0;
+              this.lastVideoTime = this.video.currentTime;
+            }
+          }, 1000);
+        },
+
+        async requestWakeLock() {
+          if ('wakeLock' in navigator && !this.wakeLock) {
+            try {
+              this.wakeLock = await navigator.wakeLock.request('screen');
+              this.wakeLock.addEventListener('release', () => {
+                this.wakeLock = null;
+              });
+            } catch (_) {}
+          }
+        },
+
+        async releaseWakeLock() {
+          if (this.wakeLock) {
+            try { await this.wakeLock.release(); } catch (_) {}
+            this.wakeLock = null;
+          }
+        },
+
+        mapCameraError(err) {
+          switch (err.name) {
+            case 'NotAllowedError':
+            case 'PermissionDeniedError':
+              return new Error('Permissão da câmera negada. Autorize o acesso nas configurações do navegador.');
+            case 'NotFoundError':
+            case 'DevicesNotFoundError':
+              return new Error('Câmera não encontrada neste dispositivo.');
+            case 'NotReadableError':
+            case 'TrackStartError':
+              return new Error('Câmera ocupada por outro aplicativo ou falha de hardware.');
+            default:
+              return new Error(`Falha na inicialização do vídeo: ${err.message || err.name}`);
+          }
         }
+      };
 
-        if (itemRetirado) {
-          capturarFrame(5);
-          desenharDestaqueRetirada(5, check.bbox);
-          temFotoDepois = true;
+      /* ========================================================================
+       * 5. MÓDULO DE INTERFACE E OVERLAY INTERATIVO
+       * ======================================================================== */
+      const UI = {
+        overlayStage: document.getElementById('overlayStage'),
+        roiBox: document.getElementById('roiBox'),
+        roiLabel: document.getElementById('roiLabel'),
+        captureFlash: document.getElementById('captureFlash'),
+        alertBanner: document.getElementById('alertBanner'),
+        camDot: document.getElementById('camDot'),
+        camStatusText: document.getElementById('camStatusText'),
+        monDot: document.getElementById('monDot'),
+        monStatusText: document.getElementById('monStatusText'),
+        baseStatusText: document.getElementById('baseStatusText'),
+        btnToggleMonitor: document.getElementById('btnToggleMonitor'),
+        galleryCount: document.getElementById('galleryCount'),
+
+        dragState: null,
+
+        init() {
+          this.bindRoiInteractions();
+          window.addEventListener('resize', () => this.syncOverlayGeometry());
+          CameraManager.video.addEventListener('loadedmetadata', () => this.syncOverlayGeometry());
+        },
+
+        setCameraStatus(text, state) {
+          this.camStatusText.textContent = `Câmera: ${text}`;
+          this.camDot.className = `dot ${state || ''}`;
+        },
+
+        setMonitorStatus(text, state) {
+          this.monStatusText.textContent = text;
+          this.monDot.className = `dot ${state || ''}`;
+        },
+
+        setBaseStatus(hasBase) {
+          this.baseStatusText.textContent = hasBase ? 'Base: Definida ✓' : 'Base: Pendente';
+          this.baseStatusText.style.color = hasBase ? '#86efac' : '#fde047';
+        },
+
+        showAlert(msg, durationMs = 0) {
+          this.alertBanner.textContent = msg;
+          this.alertBanner.style.display = 'block';
+          if (this._alertTimer) clearTimeout(this._alertTimer);
+          if (durationMs > 0) {
+            this._alertTimer = setTimeout(() => this.hideAlert(), durationMs);
+          }
+        },
+
+        hideAlert() {
+          this.alertBanner.style.display = 'none';
+        },
+
+        triggerFlash() {
+          this.captureFlash.classList.add('active');
+          requestAnimationFrame(() => {
+            setTimeout(() => this.captureFlash.classList.remove('active'), 70);
+          });
+        },
+
+        syncOverlayGeometry() {
+          const video = CameraManager.video;
+          const containerW = window.innerWidth;
+          const containerH = window.innerHeight;
+          const vw = video.videoWidth || 16;
+          const vh = video.videoHeight || 9;
+
+          const containerRatio = containerW / containerH;
+          const videoRatio = vw / vh;
+
+          let renderW, renderH, offsetX, offsetY;
+          if (containerRatio > videoRatio) {
+            renderH = containerH;
+            renderW = containerH * videoRatio;
+            offsetX = (containerW - renderW) / 2;
+            offsetY = 0;
+          } else {
+            renderW = containerW;
+            renderH = containerW / videoRatio;
+            offsetX = 0;
+            offsetY = (containerH - renderH) / 2;
+          }
+
+          this.overlayStage.style.left = `${offsetX}px`;
+          this.overlayStage.style.top = `${offsetY}px`;
+          this.overlayStage.style.width = `${renderW}px`;
+          this.overlayStage.style.height = `${renderH}px`;
+
+          this.renderRoiBox();
+        },
+
+        renderRoiBox() {
+          const { x, y, w, h } = ConfigStore.data.roi;
+          this.roiBox.style.left = `${x}%`;
+          this.roiBox.style.top = `${y}%`;
+          this.roiBox.style.width = `${w}%`;
+          this.roiBox.style.height = `${h}%`;
+          this.roiLabel.textContent = `Área: ${w}% × ${h}% (${x}%, ${y}%)`;
+        },
+
+        setMonitoringVisual(isMonitoring) {
+          if (isMonitoring) {
+            this.roiBox.classList.add('monitoring');
+            this.btnToggleMonitor.textContent = 'Parar';
+            this.btnToggleMonitor.classList.remove('btn-primary');
+            this.btnToggleMonitor.classList.add('btn-danger');
+          } else {
+            this.roiBox.classList.remove('monitoring');
+            this.btnToggleMonitor.textContent = 'Iniciar';
+            this.btnToggleMonitor.classList.remove('btn-danger');
+            this.btnToggleMonitor.classList.add('btn-primary');
+          }
+        },
+
+        bindRoiInteractions() {
+          const onPointerDown = (e) => {
+            if (AppController.isMonitoring) return;
+            const handleDir = e.target.dataset.dir || null;
+            const rect = this.overlayStage.getBoundingClientRect();
+            if (!rect.width || !rect.height) return;
+
+            e.preventDefault();
+            this.dragState = {
+              mode: handleDir ? 'resize' : 'move',
+              dir: handleDir,
+              startX: e.clientX,
+              startY: e.clientY,
+              stageW: rect.width,
+              stageH: rect.height,
+              orig: { ...ConfigStore.data.roi }
+            };
+
+            window.addEventListener('pointermove', onPointerMove, { passive: false });
+            window.addEventListener('pointerup', onPointerUp);
+            window.addEventListener('pointercancel', onPointerUp);
+          };
+
+          const onPointerMove = (e) => {
+            if (!this.dragState) return;
+            e.preventDefault();
+
+            const dxPct = ((e.clientX - this.dragState.startX) / this.dragState.stageW) * 100;
+            const dyPct = ((e.clientY - this.dragState.startY) / this.dragState.stageH) * 100;
+            const orig = this.dragState.orig;
+            const roi = ConfigStore.data.roi;
+
+            if (this.dragState.mode === 'move') {
+              roi.x = Math.max(0, Math.min(100 - orig.w, Math.round(orig.x + dxPct)));
+              roi.y = Math.max(0, Math.min(100 - orig.h, Math.round(orig.y + dyPct)));
+            } else {
+              const dir = this.dragState.dir;
+              let newX = orig.x;
+              let newY = orig.y;
+              let newW = orig.w;
+              let newH = orig.h;
+
+              if (dir.includes('e')) newW = Math.max(10, Math.min(100 - orig.x, Math.round(orig.w + dxPct)));
+              if (dir.includes('s')) newH = Math.max(10, Math.min(100 - orig.y, Math.round(orig.h + dyPct)));
+              if (dir.includes('w')) {
+                const maxLeft = orig.x + orig.w - 10;
+                newX = Math.max(0, Math.min(maxLeft, Math.round(orig.x + dxPct)));
+                newW = orig.w + (orig.x - newX);
+              }
+              if (dir.includes('n')) {
+                const maxTop = orig.y + orig.h - 10;
+                newY = Math.max(0, Math.min(maxTop, Math.round(orig.y + dyPct)));
+                newH = orig.h + (orig.y - newY);
+              }
+
+              roi.x = newX;
+              roi.y = newY;
+              roi.w = newW;
+              roi.h = newH;
+            }
+
+            this.renderRoiBox();
+            SettingsUI.syncInputsFromConfig();
+          };
+
+          const onPointerUp = async () => {
+            if (!this.dragState) return;
+            this.dragState = null;
+            ConfigStore.save();
+            await VisionEngine.resetBuffers();
+            UI.setBaseStatus(false);
+            window.removeEventListener('pointermove', onPointerMove);
+            window.removeEventListener('pointerup', onPointerUp);
+            window.removeEventListener('pointercancel', onPointerUp);
+          };
+
+          this.roiBox.addEventListener('pointerdown', onPointerDown);
         }
-      }
+      };
 
-      cooldownAte = performance.now() + estado.cooldownMs;
+      /* ========================================================================
+       * 6. MÓDULO DE INTERFACE DE AJUSTES
+       * ======================================================================== */
+      const SettingsUI = {
+        modal: document.getElementById('settingsModal'),
+        els: {
+          cameraDevice: document.getElementById('cfgCameraDevice'),
+          idleFps: document.getElementById('cfgIdleFps'),
+          valIdleFps: document.getElementById('valIdleFps'),
+          sensitivity: document.getElementById('cfgSensitivity'),
+          valSensitivity: document.getElementById('valSensitivity'),
+          postCheck: document.getElementById('cfgPostCheck'),
+          mode: document.getElementById('cfgMode'),
+          diffThreshold: document.getElementById('cfgDiffThreshold'),
+          valDiffThreshold: document.getElementById('valDiffThreshold'),
+          handWait: document.getElementById('cfgHandWait'),
+          valHandWait: document.getElementById('valHandWait'),
+          burstCount: document.getElementById('cfgBurstCount'),
+          valBurstCount: document.getElementById('valBurstCount'),
+          burstInterval: document.getElementById('cfgBurstInterval'),
+          valBurstInterval: document.getElementById('valBurstInterval'),
+          cooldown: document.getElementById('cfgCooldown'),
+          valCooldown: document.getElementById('valCooldown'),
+          roiW: document.getElementById('cfgRoiW'),
+          valRoiW: document.getElementById('valRoiW'),
+          roiH: document.getElementById('cfgRoiH'),
+          valRoiH: document.getElementById('valRoiH'),
+          roiX: document.getElementById('cfgRoiX'),
+          valRoiX: document.getElementById('valRoiX'),
+          roiY: document.getElementById('cfgRoiY'),
+          valRoiY: document.getElementById('valRoiY')
+        },
 
-      // Melhoria 5: Converte as fotos para Blob em série (fila sequencial) para evitar pico de CPU/memória
-      setStatus("⏳ Processando fotos...", "alert");
-      const indices = Array.from({ length: capturadas }, (_, i) => i);
-      if (temFotoDepois) indices.push(5);
+        init() {
+          this.syncInputsFromConfig();
+          this.bindEvents();
+        },
 
-      const fotos = [];
-      for (const idx of indices) {
-        await sleep(10); // Deixa a thread principal respirar entre cada compressão JPEG
-        fotos.push(await canvasParaBlob(capturaCanvases[idx]));
-      }
+        open() {
+          this.syncInputsFromConfig();
+          this.modal.classList.add('open');
+        },
 
-      await salvarEvento({
-        timestamp,
-        criadoEm: Date.now(),
-        formato: "blob",
-        itemRetirado,
-        mudancaPct: Math.round(mudancaPct * 10) / 10,
-        temFotoDepois,
-        fotos
-      });
+        close() {
+          this.modal.classList.remove('open');
+        },
 
-      const msgStatus = itemRetirado
-        ? `🛒 Item retirado! (${timestamp.split(" ")[1]})`
-        : `✅ Salvo às ${timestamp.split(" ")[1]}`;
-      setStatus(msgStatus, "running");
-    } catch (e) {
-      console.error("Falha ao salvar captura:", e);
-      cooldownAte = Math.max(cooldownAte, performance.now() + estado.cooldownMs);
-      setStatus("❌ Não foi possível salvar", "alert");
-      toast(mensagemErroDB(e) + " A captura deste evento foi perdida.", 6000);
-    } finally {
-      capturando = false;
-      restaurarStatusMonitorando();
-    }
-  }
+        syncInputsFromConfig() {
+          const c = ConfigStore.data;
+          this.els.cameraDevice.value = c.cameraDeviceId || '';
+          this.els.idleFps.value = c.idleFps;
+          this.els.valIdleFps.textContent = `${c.idleFps} FPS`;
 
-  /* ================= WAKE LOCK ================= */
-  let wakeLock = null;
-  async function pedirWakeLock() {
-    try {
-      if (isRunning && "wakeLock" in navigator && !wakeLock) {
-        wakeLock = await navigator.wakeLock.request("screen");
-        wakeLock.addEventListener("release", () => { wakeLock = null; });
-      }
-    } catch (e) { wakeLock = null; }
-  }
-  function soltarWakeLock() {
-    try { if (wakeLock) wakeLock.release(); } catch (e) {}
-    wakeLock = null;
-  }
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) { resetarReferencia(); pedirWakeLock(); }
-  });
+          this.els.sensitivity.value = c.sensitivity;
+          this.els.valSensitivity.textContent = c.sensitivity;
 
-  /* ================= START / STOP ================= */
-  function iniciarMonitoramento() {
-    if (!cameraPronta) {
-      toast("A câmera ainda não está pronta. Toque em 🔄 Câmera se o problema persistir.");
-      return;
-    }
-    isRunning = true;
-    btnToggle.textContent = "⏹️ Parar";
-    btnToggle.classList.add("active");
-    btnRef.hidden = !estado.posAcaoAtiva;
-    if (estado.posAcaoAtiva) capturarBaseMesa();
-    setStatus("Monitorando prateleira...", "running");
-    resetarReferencia();
-    cooldownAte = 0;
-    desenharOverlay();
-    iniciarDeteccao();
-    pedirWakeLock();
-  }
-  function pararMonitoramento() {
-    const estavaRodando = isRunning;
-    isRunning = false;
-    btnRef.hidden = true;
-    pararDeteccao();
-    soltarWakeLock();
-    btnToggle.textContent = "▶️ Iniciar";
-    btnToggle.classList.remove("active");
-    desenharOverlay();
-    if (estavaRodando && cameraPronta) setStatus("Pausado. Arraste as bordas p/ regular.", "");
-  }
-  btnToggle.addEventListener("click", () => isRunning ? pararMonitoramento() : iniciarMonitoramento());
-  btnRetry.addEventListener("click", iniciarCamera);
-  btnRef.addEventListener("click", () => {
-    if (capturarBaseMesa()) {
-      resetarReferencia();
-      toast("📌 Foto base da mesa atualizada!", 2500);
-    }
-  });
+          this.els.postCheck.checked = c.postCheck;
+          this.els.mode.value = c.mode;
 
-  /* ================= DESENHO SOB DEMANDA (MELHORIA 1: ZERO REDRAW 60FPS) ================= */
-  function getRenderedRect() {
-    const cw = canvas.clientWidth, ch = canvas.clientHeight;
-    const vw = canvas.width || 1280, vh = canvas.height || 720;
-    const canvasRatio = cw / ch, videoRatio = vw / vh;
-    let renderW = cw, renderH = ch, offsetX = 0, offsetY = 0;
-    if (canvasRatio > videoRatio) { renderW = ch * videoRatio; offsetX = (cw - renderW) / 2; }
-    else { renderH = cw / videoRatio; offsetY = (ch - renderH) / 2; }
-    return { x: offsetX, y: offsetY, w: renderW, h: renderH };
-  }
-  function getNormCoords(e) {
-    const rect = canvas.getBoundingClientRect();
-    const render = getRenderedRect();
-    const px = e.clientX - rect.left - render.x;
-    const py = e.clientY - rect.top - render.y;
-    return { normX: clamp(px / render.w, 0, 1), normY: clamp(py / render.h, 0, 1) };
-  }
+          this.els.diffThreshold.value = c.diffThreshold;
+          this.els.valDiffThreshold.textContent = `${c.diffThreshold}%`;
 
-  // Melhoria 1: Só desenha no canvas quando a caixa muda, quando alterna Iniciar/Parar ou redimensiona a tela
-  function desenharOverlay() {
-    if (!cameraPronta || !video.videoWidth) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      return;
-    }
-    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-    }
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+          this.els.handWait.value = c.handWait;
+          this.els.valHandWait.textContent = `${c.handWait} ms`;
 
-    const pxX = canvas.width * caixa.x, pxY = canvas.height * caixa.y;
-    const pxW = canvas.width * caixa.w, pxH = canvas.height * caixa.h;
+          this.els.burstCount.value = c.burstCount;
+          this.els.valBurstCount.textContent = c.burstCount;
 
-    ctx.fillStyle = isRunning ? "rgba(255, 0, 0, 0.22)" : "rgba(255, 165, 0, 0.18)";
-    ctx.fillRect(pxX, pxY, pxW, pxH);
-    ctx.strokeStyle = isRunning ? "#ff3b30" : "#00e676";
-    ctx.lineWidth = isRunning ? 3 : 4;
-    ctx.setLineDash(isRunning ? [] : [6, 4]);
-    ctx.strokeRect(pxX, pxY, pxW, pxH);
-    ctx.setLineDash([]);
+          this.els.burstInterval.value = c.burstInterval;
+          this.els.valBurstInterval.textContent = `${c.burstInterval} ms`;
 
-    if (!isRunning) {
-      const handleRadius = Math.max(12, Math.min(22, canvas.width * 0.015));
-      const handles = [
-        { x: pxX, y: pxY }, { x: pxX + pxW, y: pxY },
-        { x: pxX, y: pxY + pxH }, { x: pxX + pxW, y: pxY + pxH },
-        { x: pxX + pxW / 2, y: pxY }, { x: pxX + pxW / 2, y: pxY + pxH },
-        { x: pxX, y: pxY + pxH / 2 }, { x: pxX + pxW, y: pxY + pxH / 2 }
-      ];
-      handles.forEach(h => {
-        ctx.beginPath();
-        ctx.arc(h.x, h.y, handleRadius, 0, 2 * Math.PI);
-        ctx.fillStyle = "#ffffff";
-        ctx.fill();
-        ctx.lineWidth = 3;
-        ctx.strokeStyle = "#00e676";
-        ctx.stroke();
-      });
-      ctx.font = "bold 15px sans-serif";
-      ctx.fillStyle = "#00e676";
-      ctx.fillText("✋ ARRASTE AS BORDAS OU BOLINHAS P/ AJUSTAR", pxX + 8, Math.max(26, pxY - 12));
-    } else {
-      ctx.font = "bold 16px sans-serif";
-      ctx.fillStyle = "#ff3b30";
-      ctx.fillText("⚠️ PRATELEIRA", pxX + 8, Math.max(26, pxY - 10));
-      if (DEBUG) {
-        ctx.font = "bold 14px monospace";
-        ctx.fillStyle = "#ffeb3b";
-        const a = ultimaAnalise;
-        ctx.fillText(`mov ${(a.razao * 100).toFixed(2)}%  celulas ${a.celulas}  luz ${a.offset}`, 10, canvas.height - 12);
-      }
-    }
-  }
-  window.addEventListener("resize", desenharOverlay);
+          this.els.cooldown.value = c.cooldown;
+          this.els.valCooldown.textContent = `${c.cooldown} ms`;
 
-  /* ================= ARRASTAR CAIXA ================= */
-  let dragMode = null;
-  let dragStart = { x: 0, y: 0 };
-  let initialBox = { x: 0, y: 0, w: 0, h: 0 };
+          this.els.roiW.value = c.roi.w;
+          this.els.valRoiW.textContent = `${c.roi.w}%`;
 
-  canvas.addEventListener("pointerdown", (e) => {
-    if (isRunning || !cameraPronta) return;
-    const p = getNormCoords(e);
-    const tol = CONFIG.interacao.tolerancia;
-    const { x, y, w, h } = caixa;
-    const noY = p.normY >= y - tol && p.normY <= y + h + tol;
-    const noX = p.normX >= x - tol && p.normX <= x + w + tol;
-    const l = Math.abs(p.normX - x) < tol && noY;
-    const r = !l && Math.abs(p.normX - (x + w)) < tol && noY;
-    const t = Math.abs(p.normY - y) < tol && noX;
-    const b = !t && Math.abs(p.normY - (y + h)) < tol && noX;
+          this.els.roiH.value = c.roi.h;
+          this.els.valRoiH.textContent = `${c.roi.h}%`;
 
-    dragStart = { x: p.normX, y: p.normY };
-    initialBox = { x, y, w, h };
-    if (l || r || t || b) dragMode = { l, r, t, b };
-    else if (p.normX > x && p.normX < x + w && p.normY > y && p.normY < y + h) dragMode = { move: true };
-    else dragMode = null;
-    if (dragMode) { try { canvas.setPointerCapture(e.pointerId); } catch (err) {} }
-  });
+          this.els.roiX.max = 100 - c.roi.w;
+          this.els.roiX.value = c.roi.x;
+          this.els.valRoiX.textContent = `${c.roi.x}%`;
 
-  window.addEventListener("pointermove", (e) => {
-    if (!dragMode || isRunning) return;
-    const p = getNormCoords(e);
-    const dx = p.normX - dragStart.x, dy = p.normY - dragStart.y;
-    const ib = initialBox, min = L.caixaMin;
+          this.els.roiY.max = 100 - c.roi.h;
+          this.els.roiY.value = c.roi.y;
+          this.els.valRoiY.textContent = `${c.roi.y}%`;
+        },
 
-    if (dragMode.move) { definirCaixa({ x: ib.x + dx, y: ib.y + dy, w: ib.w, h: ib.h }); return; }
+        bindEvents() {
+          this.els.cameraDevice.addEventListener('change', async () => {
+            ConfigStore.data.cameraDeviceId = this.els.cameraDevice.value;
+            ConfigStore.save();
+            const wasMonitoring = AppController.isMonitoring;
+            if (wasMonitoring) await AppController.stopMonitoring();
+            await AppController.initCamera();
+          });
 
-    let left = ib.x, top = ib.y, right = ib.x + ib.w, bottom = ib.y + ib.h;
-    if (dragMode.l) left = clamp(ib.x + dx, 0, right - min);
-    if (dragMode.r) right = clamp(ib.x + ib.w + dx, left + min, 1);
-    if (dragMode.t) top = clamp(ib.y + dy, 0, bottom - min);
-    if (dragMode.b) bottom = clamp(ib.y + ib.h + dy, top + min, 1);
-    definirCaixa({ x: left, y: top, w: right - left, h: bottom - top });
-  });
-  const fimArraste = () => { dragMode = null; };
-  window.addEventListener("pointerup", fimArraste);
-  window.addEventListener("pointercancel", fimArraste);
+          const updateFromInputs = async (roiChanged = false) => {
+            const c = ConfigStore.data;
+            c.idleFps = Number(this.els.idleFps.value);
+            c.sensitivity = Number(this.els.sensitivity.value);
+            c.postCheck = this.els.postCheck.checked;
+            c.mode = this.els.mode.value;
+            c.diffThreshold = Number(this.els.diffThreshold.value);
+            c.handWait = Number(this.els.handWait.value);
+            c.burstCount = Number(this.els.burstCount.value);
+            c.burstInterval = Number(this.els.burstInterval.value);
+            c.cooldown = Number(this.els.cooldown.value);
 
-  /* ================= MODAIS E SLIDERS ================= */
-  const modalConfig = $("modal-config");
-  const modalGallery = $("modal-gallery");
-  $("btn-config").addEventListener("click", () => modalConfig.style.display = "flex");
+            if (roiChanged) {
+              c.roi.w = Number(this.els.roiW.value);
+              c.roi.h = Number(this.els.roiH.value);
+              c.roi.x = Math.min(100 - c.roi.w, Number(this.els.roiX.value));
+              c.roi.y = Math.min(100 - c.roi.h, Number(this.els.roiY.value));
+              ConfigStore.normalizeRoi();
+              UI.renderRoiBox();
+              await VisionEngine.resetBuffers();
+              UI.setBaseStatus(false);
+            }
 
-  function fecharModaisEResetar() {
-    modalConfig.style.display = "none";
-    fecharGaleria();
-    resetarReferencia();
-    if (isRunning) cooldownAte = Math.max(cooldownAte, performance.now() + 1000);
-  }
-  $("close-config").addEventListener("click", fecharModaisEResetar);
-  $("close-gallery").addEventListener("click", fecharModaisEResetar);
+            this.syncInputsFromConfig();
+            ConfigStore.save();
+          };
 
-  const sliderW = $("slider-box-w"), valW = $("val-box-w");
-  const sliderH = $("slider-box-h"), valH = $("val-box-h");
-  const sliderX = $("slider-box-x"), valX = $("val-box-x");
-  const sliderY = $("slider-box-y"), valY = $("val-box-y");
+          ['idleFps', 'sensitivity', 'postCheck', 'mode', 'diffThreshold', 'handWait', 'burstCount', 'burstInterval', 'cooldown']
+            .forEach((key) => {
+              this.els[key].addEventListener('input', () => updateFromInputs(false));
+              this.els[key].addEventListener('change', () => updateFromInputs(false));
+            });
 
-  function sincronizarSliders() {
-    const pct = (v) => Math.round(v * 100);
-    sliderW.value = pct(caixa.w); valW.textContent = `${pct(caixa.w)}%`;
-    sliderH.value = pct(caixa.h); valH.textContent = `${pct(caixa.h)}%`;
-    sliderX.max = pct(1 - caixa.w); sliderX.value = pct(caixa.x); valX.textContent = `${pct(caixa.x)}%`;
-    sliderY.max = pct(1 - caixa.h); sliderY.value = pct(caixa.y); valY.textContent = `${pct(caixa.y)}%`;
-  }
-  sincronizarSliders();
-  sliderW.addEventListener("input", (e) => definirCaixa({ w: e.target.value / 100 }));
-  sliderH.addEventListener("input", (e) => definirCaixa({ h: e.target.value / 100 }));
-  sliderX.addEventListener("input", (e) => definirCaixa({ x: e.target.value / 100 }));
-  sliderY.addEventListener("input", (e) => definirCaixa({ y: e.target.value / 100 }));
+          ['roiW', 'roiH', 'roiX', 'roiY'].forEach((key) => {
+            this.els[key].addEventListener('input', () => updateFromInputs(true));
+          });
 
-  function ligarSlider(idSlider, idValor, chave, formatar) {
-    const s = $(idSlider), v = $(idValor);
-    s.value = estado[chave]; v.textContent = formatar(estado[chave]);
-    s.addEventListener("input", (e) => {
-      estado[chave] = parseInt(e.target.value, 10);
-      prefs.set(chave, estado[chave]);
-      v.textContent = formatar(estado[chave]);
-    });
-  }
-  $("sens-default").textContent = P.sensibilidade;
-  ligarSlider("slider-sens", "val-sens", "sensibilidade", (v) => v);
-  ligarSlider("slider-count", "val-count", "burstCount", (v) => `${v} foto${v > 1 ? "s" : ""}`);
-  ligarSlider("slider-interval", "val-interval", "burstInterval", (v) => `${v}ms`);
-  ligarSlider("slider-cooldown", "val-cooldown", "cooldownMs", (v) => `${(v / 1000).toFixed(1)}s`);
-  ligarSlider("slider-item-diff", "val-item-diff", "itemDiff", (v) => v);
-  ligarSlider("slider-pos-delay", "val-pos-delay", "posDelayMs", (v) => `${(v / 1000).toFixed(1)}s`);
+          document.getElementById('resetSettingsBtn').addEventListener('click', async () => {
+            ConfigStore.reset();
+            this.syncInputsFromConfig();
+            UI.renderRoiBox();
+            await VisionEngine.resetBuffers();
+            UI.setBaseStatus(false);
+          });
 
-  const chkPosAcao = $("chk-pos-acao");
-  const posAcaoOpcoes = $("pos-acao-opcoes");
-  function atualizarVisibilidadePosAcao() {
-    chkPosAcao.checked = estado.posAcaoAtiva;
-    posAcaoOpcoes.style.display = estado.posAcaoAtiva ? "block" : "none";
-    if (isRunning) {
-      btnRef.hidden = !estado.posAcaoAtiva;
-      if (estado.posAcaoAtiva && !baseMesaLuma) capturarBaseMesa();
-    }
-  }
-  chkPosAcao.addEventListener("change", (e) => {
-    estado.posAcaoAtiva = e.target.checked;
-    prefs.set("posAcaoAtiva", estado.posAcaoAtiva);
-    atualizarVisibilidadePosAcao();
-  });
-  atualizarVisibilidadePosAcao();
-
-  const selectModoItem = $("select-modo-item");
-  selectModoItem.value = estado.modoItem;
-  selectModoItem.addEventListener("change", (e) => {
-    estado.modoItem = e.target.value;
-    prefs.set("modoItem", estado.modoItem);
-  });
-
-  /* ================= GALERIA COM PAGINAÇÃO E LAZY LOADING (MELHORIA 6) ================= */
-  let currentGalleryImages = [];
-  let galeriaUrls = [];
-  let galeriaEventosOrdenados = [];
-  let galeriaExibidos = 0;
-  let galeriaToken = 0;
-  let currentLightboxIndex = 0;
-  const galleryContainer = $("gallery-container");
-  const lightbox = $("lightbox");
-  const lightboxImg = $("lightbox-img");
-  const lbCounter = $("lightbox-counter");
-
-  function mensagemGaleria(texto) {
-    galleryContainer.innerHTML = "";
-    const d = document.createElement("div");
-    d.className = "gallery-msg";
-    d.textContent = texto;
-    galleryContainer.appendChild(d);
-  }
-  function liberarUrlsGaleria() {
-    galeriaUrls.forEach(u => URL.revokeObjectURL(u));
-    galeriaUrls = [];
-    currentGalleryImages = [];
-    galeriaEventosOrdenados = [];
-    galeriaExibidos = 0;
-  }
-  function srcDaFoto(f) {
-    if (typeof f === "string") return f;
-    if (f instanceof Blob) { const u = URL.createObjectURL(f); galeriaUrls.push(u); return u; }
-    return "";
-  }
-  function fecharGaleria() {
-    galeriaToken++;
-    modalGallery.style.display = "none";
-    lightbox.style.display = "none";
-    lightboxImg.removeAttribute("src");
-    galleryContainer.innerHTML = "";
-    liberarUrlsGaleria();
-  }
-
-  function renderizarLoteGaleria() {
-    const btnAntigo = $("btn-load-more");
-    if (btnAntigo) btnAntigo.remove();
-
-    const lote = galeriaEventosOrdenados.slice(galeriaExibidos, galeriaExibidos + CONFIG.galeria.tamanhoPagina);
-    const frag = document.createDocumentFragment();
-
-    lote.forEach((ev) => {
-      const fotos = Array.isArray(ev.fotos) ? ev.fotos : [];
-      const card = document.createElement("div");
-      card.className = "event-card";
-
-      const meta = document.createElement("div");
-      meta.className = "event-meta";
-      const infoLeft = document.createElement("span");
-      const b = document.createElement("b");
-      b.textContent = ev.timestamp || "";
-      infoLeft.append("🕒 ", b, ` (${fotos.length} fotos)`);
-      meta.appendChild(infoLeft);
-
-      if (ev.itemRetirado === true) {
-        const badge = document.createElement("span");
-        badge.className = "event-badge retirado";
-        badge.textContent = `🛒 ITEM RETIRADO (${ev.mudancaPct || 0}%)`;
-        meta.appendChild(badge);
-      } else if (ev.itemRetirado === false) {
-        const badge = document.createElement("span");
-        badge.className = "event-badge movimento";
-        badge.textContent = "👀 SÓ MOVIMENTO";
-        meta.appendChild(badge);
-      }
-
-      const grid = document.createElement("div");
-      grid.className = "thumb-grid";
-      card.append(meta, grid);
-
-      fotos.forEach((f, idx) => {
-        const src = srcDaFoto(f);
-        if (!src) return;
-        const globalIndex = currentGalleryImages.length;
-        currentGalleryImages.push(src);
-
-        const wrap = document.createElement("div");
-        wrap.className = "thumb-wrap";
-        const img = document.createElement("img");
-        img.loading = "lazy";
-        img.decoding = "async";
-        img.src = src;
-        img.alt = "Foto capturada";
-        img.addEventListener("click", () => openLightbox(globalIndex));
-        wrap.appendChild(img);
-
-        if (ev.temFotoDepois && idx === fotos.length - 1) {
-          const lbl = document.createElement("span");
-          lbl.className = "thumb-label";
-          lbl.textContent = "DEPOIS";
-          wrap.appendChild(lbl);
+          document.getElementById('saveSettingsBtn').addEventListener('click', () => this.close());
+          document.getElementById('closeSettingsBtn').addEventListener('click', () => this.close());
         }
-        grid.appendChild(wrap);
-      });
-      frag.appendChild(card);
-    });
+      };
 
-    galeriaExibidos += lote.length;
+      /* ========================================================================
+       * 7. MÓDULO DE GALERIA E LIGHTBOX (Miniaturas Leves + Full-HD sob demanda)
+       * ======================================================================== */
+      const GalleryUI = {
+        modal: document.getElementById('galleryModal'),
+        listEl: document.getElementById('galleryList'),
+        loadMoreBtn: document.getElementById('loadMoreBtn'),
+        lightbox: document.getElementById('lightboxModal'),
+        lbImage: document.getElementById('lbImage'),
+        lbCounter: document.getElementById('lbCounter'),
+        lbCaption: document.getElementById('lbCaption'),
 
-    if (galeriaExibidos < galeriaEventosOrdenados.length) {
-      const restantes = galeriaEventosOrdenados.length - galeriaExibidos;
-      const btnMais = document.createElement("button");
-      btnMais.id = "btn-load-more";
-      btnMais.className = "btn-load-more";
-      btnMais.textContent = `➕ Carregar mais antigos (${restantes} restantes)`;
-      btnMais.addEventListener("click", renderizarLoteGaleria);
-      frag.appendChild(btnMais);
-    }
+        pageSize: 20,
+        loadedOffset: 0,
+        totalCount: 0,
+        thumbUrls: [],
+        activeFullUrl: null,
+        currentPhotos: [], // [{ fullBlob, label }]
+        currentPhotoIdx: 0,
 
-    galleryContainer.appendChild(frag);
-  }
+        init() {
+          document.getElementById('closeGalleryBtn').addEventListener('click', () => this.close());
+          this.loadMoreBtn.addEventListener('click', () => this.loadNextPage());
+          document.getElementById('clearAllBtn').addEventListener('click', async () => {
+            if (!confirm('Deseja realmente apagar todos os registros e fotos armazenados?')) return;
+            try {
+              await DBStore.clearAll();
+              this.revokeThumbUrls();
+              this.listEl.innerHTML = '<p style="color:var(--muted);text-align:center;">Nenhum registro encontrado.</p>';
+              this.loadMoreBtn.style.display = 'none';
+              await this.refreshCount();
+            } catch (err) {
+              UI.showAlert(err.message, 4000);
+            }
+          });
 
-  $("btn-gallery").addEventListener("click", async () => {
-    const token = ++galeriaToken;
-    modalGallery.style.display = "flex";
-    liberarUrlsGaleria();
-    mensagemGaleria("Carregando...");
+          document.getElementById('closeLightboxBtn').addEventListener('click', () => this.closeLightbox());
+          document.getElementById('lbPrevBtn').addEventListener('click', () => this.stepLightbox(-1));
+          document.getElementById('lbNextBtn').addEventListener('click', () => this.stepLightbox(1));
 
-    let eventos;
-    try { eventos = await obterEventos(); }
-    catch (e) {
-      if (token !== galeriaToken) return;
-      console.error("Falha ao carregar galeria:", e);
-      mensagemGaleria("Não foi possível carregar os registros.");
-      toast(mensagemErroDB(e));
-      return;
-    }
-    if (token !== galeriaToken) return;
+          window.addEventListener('keydown', (e) => {
+            if (!this.lightbox.classList.contains('open')) return;
+            if (e.key === 'ArrowLeft') this.stepLightbox(-1);
+            if (e.key === 'ArrowRight') this.stepLightbox(1);
+            if (e.key === 'Escape') this.closeLightbox();
+          });
+        },
 
-    if (!eventos.length) { mensagemGaleria("Nenhum registro capturado."); return; }
+        async refreshCount() {
+          this.totalCount = await DBStore.countEvents();
+          UI.galleryCount.textContent = this.totalCount;
+        },
 
-    galleryContainer.innerHTML = "";
-    galeriaEventosOrdenados = [...eventos].reverse();
-    renderizarLoteGaleria();
-  });
+        revokeThumbUrls() {
+          for (const url of this.thumbUrls) {
+            URL.revokeObjectURL(url);
+          }
+          this.thumbUrls = [];
+        },
 
-  function openLightbox(index) {
-    currentLightboxIndex = index;
-    atualizarLightbox();
-    lightbox.style.display = "flex";
-  }
-  function atualizarLightbox() {
-    lightboxImg.src = currentGalleryImages[currentLightboxIndex];
-    lbCounter.textContent = `${currentLightboxIndex + 1} / ${currentGalleryImages.length}`;
-  }
-  $("btn-lb-prev").addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (currentLightboxIndex > 0) { currentLightboxIndex--; atualizarLightbox(); }
-  });
-  $("btn-lb-next").addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (currentLightboxIndex < currentGalleryImages.length - 1) { currentLightboxIndex++; atualizarLightbox(); }
-  });
-  $("btn-close-lightbox").addEventListener("click", (e) => {
-    e.stopPropagation();
-    lightbox.style.display = "none";
-  });
-  lightbox.addEventListener("click", (e) => { if (e.target === lightbox) lightbox.style.display = "none"; });
+        revokeFullUrl() {
+          if (this.activeFullUrl) {
+            URL.revokeObjectURL(this.activeFullUrl);
+            this.activeFullUrl = null;
+          }
+        },
 
-  $("btn-clear").addEventListener("click", async () => {
-    if (!confirm("Apagar todos os registros da galeria?")) return;
-    try {
-      await limparEventos();
-      fecharModaisEResetar();
-      setStatus("Galeria limpa.", isRunning ? "running" : "");
-    } catch (e) {
-      console.error("Falha ao limpar:", e);
-      toast("Não foi possível apagar os registros. " + mensagemErroDB(e));
-    }
-  });
+        async open() {
+          this.revokeThumbUrls();
+          this.loadedOffset = 0;
+          this.listEl.innerHTML = '';
+          await this.refreshCount();
 
-  /* ================= INICIALIZAÇÃO ================= */
-  (async function iniciarApp() {
-    $("version-badge").textContent = "v" + APP_VERSION;
-    const dbOk = await initDB();
-    if (!dbOk) {
-      toast("Não foi possível abrir o armazenamento do navegador. As capturas podem não ser salvas.", 7000);
-    } else if (navigator.storage && navigator.storage.persist) {
-      navigator.storage.persist().catch(() => {});
-    }
-    iniciarCamera();
-  })();
-</script>
+          if (this.totalCount === 0) {
+            this.listEl.innerHTML = '<p style="color:var(--muted);text-align:center;">Nenhum registro encontrado.</p>';
+            this.loadMoreBtn.style.display = 'none';
+          } else {
+            await this.loadNextPage();
+          }
 
+          this.modal.classList.add('open');
+        },
+
+        close() {
+          this.closeLightbox();
+          this.modal.classList.remove('open');
+          this.revokeThumbUrls();
+          this.listEl.innerHTML = '';
+        },
+
+        async loadNextPage() {
+          try {
+            const events = await DBStore.getEventsPage(this.loadedOffset, this.pageSize);
+            this.loadedOffset += events.length;
+
+            for (const ev of events) {
+              this.listEl.appendChild(this.renderEventCard(ev));
+            }
+
+            if (this.loadedOffset < this.totalCount) {
+              this.loadMoreBtn.style.display = 'inline-flex';
+            } else {
+              this.loadMoreBtn.style.display = 'none';
+            }
+          } catch (err) {
+            UI.showAlert(err.message, 4000);
+          }
+        },
+
+        renderEventCard(ev) {
+          const card = document.createElement('div');
+          card.className = `event-card ${ev.isWithdrawal ? 'withdrawal' : ''}`;
+
+          const dateStr = new Date(ev.timestamp).toLocaleString('pt-BR');
+          const tagHtml = ev.isWithdrawal
+            ? `<span class="tag tag-withdrawal">Possível Retirada (${ev.changePercent}%)</span>`
+            : `<span class="tag tag-motion">Somente Movimento</span>`;
+
+          const meta = document.createElement('div');
+          meta.className = 'event-meta';
+          meta.innerHTML = `
+            <div>
+              <strong>${dateStr}</strong>
+              <span style="color:var(--muted);margin-left:8px;">${ev.photos.length} foto(s)</span>
+            </div>
+            <div>${tagHtml}</div>
+          `;
+
+          const thumbsRow = document.createElement('div');
+          thumbsRow.className = 'thumbs-row';
+
+          // Carrega apenas thumbBlob (~4KB) na grade para economizar RAM/GPU
+          const lightboxItems = ev.photos.map((p, idx) => ({
+            fullBlob: p.blob,
+            label: p.isAfter
+              ? `DEPOIS • Alteração: ${ev.changePercent}%`
+              : `Captura #${idx + 1}`
+          }));
+
+          ev.photos.forEach((p, idx) => {
+            const thumbSource = p.thumbBlob || p.blob;
+            const thumbUrl = URL.createObjectURL(thumbSource);
+            this.thumbUrls.push(thumbUrl);
+
+            const wrap = document.createElement('div');
+            wrap.className = 'thumb-wrap';
+
+            const img = document.createElement('img');
+            img.src = thumbUrl;
+            img.loading = 'lazy';
+            img.decoding = 'async';
+            img.alt = lightboxItems[idx].label;
+
+            const badge = document.createElement('span');
+            badge.className = `thumb-badge ${p.isAfter ? 'after' : ''}`;
+            badge.textContent = p.isAfter ? 'DEPOIS' : `#${idx + 1}`;
+
+            wrap.appendChild(img);
+            wrap.appendChild(badge);
+            wrap.addEventListener('click', () => this.openLightbox(lightboxItems, idx));
+            thumbsRow.appendChild(wrap);
+          });
+
+          card.appendChild(meta);
+          card.appendChild(thumbsRow);
+          return card;
+        },
+
+        openLightbox(photoItems, startIndex) {
+          this.currentPhotos = photoItems;
+          this.currentPhotoIdx = startIndex;
+          this.updateLightbox();
+          this.lightbox.classList.add('open');
+        },
+
+        closeLightbox() {
+          this.lightbox.classList.remove('open');
+          this.lbImage.removeAttribute('src');
+          this.revokeFullUrl();
+        },
+
+        stepLightbox(delta) {
+          if (!this.currentPhotos.length) return;
+          const total = this.currentPhotos.length;
+          this.currentPhotoIdx = (this.currentPhotoIdx + delta + total) % total;
+          this.updateLightbox();
+        },
+
+        updateLightbox() {
+          const item = this.currentPhotos[this.currentPhotoIdx];
+          if (!item) return;
+          this.revokeFullUrl();
+          this.activeFullUrl = URL.createObjectURL(item.fullBlob);
+          this.lbImage.src = this.activeFullUrl;
+          this.lbCounter.textContent = `${this.currentPhotoIdx + 1} / ${this.currentPhotos.length}`;
+          this.lbCaption.textContent = item.label;
+        }
+      };
+
+      /* ========================================================================
+       * 8. CONTROLADOR PRINCIPAL (Frame Skipping Dinâmico + Pipeline 2 Etapas)
+       * ======================================================================== */
+      const AppController = {
+        isMonitoring: false,
+        isProcessingEvent: false,
+        isAnalyzingFrame: false,
+        cooldownUntil: 0,
+        lastProcessedVideoTime: -1,
+        lastAnalysisTimestamp: 0,
+        vfcHandle: null,
+        rafHandle: null,
+        watchdogTimer: null,
+        lastLoopHeartbeat: 0,
+
+        async init() {
+          PWAManager.init();
+          ConfigStore.load();
+          VisionEngine.init();
+          UI.init();
+          SettingsUI.init();
+          GalleryUI.init();
+
+          this.bindMainButtons();
+
+          try {
+            await DBStore.init();
+            await GalleryUI.refreshCount();
+          } catch (err) {
+            UI.showAlert(err.message);
+          }
+
+          await this.initCamera();
+        },
+
+        async initCamera() {
+          UI.hideAlert();
+          UI.setCameraStatus('Iniciando...', 'warn');
+          try {
+            const info = await CameraManager.start();
+            UI.setCameraStatus(`${info.width}x${info.height}`, 'ok');
+            UI.syncOverlayGeometry();
+            await VisionEngine.resetBuffers();
+            UI.setBaseStatus(false);
+          } catch (err) {
+            UI.setCameraStatus('Erro', 'warn');
+            UI.showAlert(err.message);
+          }
+        },
+
+        async captureBaseImage() {
+          const video = CameraManager.video;
+          if (!CameraManager.stream || video.readyState < 2) {
+            UI.showAlert('Aguarde a câmera estar ativa para definir a imagem base.', 3500);
+            return false;
+          }
+          await VisionEngine.captureBaseline(video, ConfigStore.data.roi);
+          UI.setBaseStatus(true);
+          UI.triggerFlash();
+          return true;
+        },
+
+        async startMonitoring() {
+          const video = CameraManager.video;
+          if (!CameraManager.stream || video.readyState < 2) {
+            UI.showAlert('Não é possível iniciar: câmera indisponível.', 4000);
+            return;
+          }
+
+          try {
+            if (ConfigStore.data.postCheck && !VisionEngine.hasBaseline) {
+              await VisionEngine.captureBaseline(video, ConfigStore.data.roi);
+              UI.setBaseStatus(true);
+            }
+
+            this.isMonitoring = true;
+            this.isProcessingEvent = false;
+            this.isAnalyzingFrame = false;
+            this.lastProcessedVideoTime = -1;
+            this.lastAnalysisTimestamp = 0;
+            this.lastLoopHeartbeat = performance.now();
+
+            UI.setMonitoringVisual(true);
+            UI.setMonitorStatus('Monitorando', 'active');
+            await CameraManager.requestWakeLock();
+
+            this.startDetectionLoop();
+            this.startWatchdog();
+          } catch (err) {
+            this.isMonitoring = false;
+            UI.setMonitoringVisual(false);
+            UI.showAlert('Falha na inicialização do monitoramento.');
+          }
+        },
+
+        async stopMonitoring() {
+          this.isMonitoring = false;
+          this.stopDetectionLoop();
+          if (this.watchdogTimer) {
+            clearInterval(this.watchdogTimer);
+            this.watchdogTimer = null;
+          }
+          await CameraManager.releaseWakeLock();
+          UI.setMonitoringVisual(false);
+          UI.setMonitorStatus('Pausado', 'warn');
+        },
+
+        startDetectionLoop() {
+          const video = CameraManager.video;
+          const supportsRVFC = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
+
+          const scheduleNext = () => {
+            if (!this.isMonitoring) return;
+            if (supportsRVFC) {
+              this.vfcHandle = video.requestVideoFrameCallback(step);
+            } else {
+              this.rafHandle = requestAnimationFrame(step);
+            }
+          };
+
+          const step = async () => {
+            if (!this.isMonitoring) return;
+            const now = performance.now();
+            this.lastLoopHeartbeat = now;
+
+            // Frame Skipping Inteligente: em vigília analisa na taxa configurada (ex.: 10 FPS)
+            const minIntervalMs = 1000 / Math.max(5, ConfigStore.data.idleFps);
+
+            if (
+              !this.isProcessingEvent &&
+              !this.isAnalyzingFrame &&
+              now >= this.cooldownUntil &&
+              now - this.lastAnalysisTimestamp >= minIntervalMs &&
+              video.readyState >= 2 &&
+              video.currentTime !== this.lastProcessedVideoTime
+            ) {
+              this.lastProcessedVideoTime = video.currentTime;
+              this.lastAnalysisTimestamp = now;
+              this.isAnalyzingFrame = true;
+
+              try {
+                const res = await VisionEngine.detectMotion(
+                  video,
+                  ConfigStore.data.roi,
+                  ConfigStore.data.sensitivity
+                );
+                if (res && res.detected && this.isMonitoring) {
+                  this.handleMotionEvent();
+                }
+              } finally {
+                this.isAnalyzingFrame = false;
+              }
+            }
+
+            scheduleNext();
+          };
+
+          scheduleNext();
+        },
+
+        stopDetectionLoop() {
+          const video = CameraManager.video;
+          if (this.vfcHandle !== null && video.cancelVideoFrameCallback) {
+            video.cancelVideoFrameCallback(this.vfcHandle);
+            this.vfcHandle = null;
+          }
+          if (this.rafHandle !== null) {
+            cancelAnimationFrame(this.rafHandle);
+            this.rafHandle = null;
+          }
+        },
+
+        startWatchdog() {
+          if (this.watchdogTimer) clearInterval(this.watchdogTimer);
+          this.watchdogTimer = setInterval(() => {
+            if (!this.isMonitoring) return;
+            const elapsed = performance.now() - this.lastLoopHeartbeat;
+            if (elapsed > 2500 && !this.isProcessingEvent) {
+              this.stopDetectionLoop();
+              this.lastLoopHeartbeat = performance.now();
+              this.startDetectionLoop();
+            }
+          }, 1500);
+        },
+
+        waitForNextNewFrame(video, prevTime, minDelayMs) {
+          return new Promise((resolve) => {
+            const start = performance.now();
+            const check = () => {
+              const elapsed = performance.now() - start;
+              if (elapsed >= minDelayMs && (video.currentTime !== prevTime || elapsed >= minDelayMs + 120)) {
+                resolve();
+              } else {
+                requestAnimationFrame(check);
+              }
+            };
+            requestAnimationFrame(check);
+          });
+        },
+
+        /**
+         * Pipeline Desacoplado:
+         * - Fase 1 (Alta Frequência): Captura os canvases crus no ritmo exato da rajada sem atraso de JPEG.
+         * - Fase 2 (Assíncrona): Codifica Blobs Full + Miniaturas enquanto aguarda a saída da mão.
+         */
+        async handleMotionEvent() {
+          this.isProcessingEvent = true;
+          const video = CameraManager.video;
+          const cfg = ConfigStore.data;
+          const rawBurstCanvases = [];
+
+          try {
+            UI.setMonitorStatus('Capturando...', 'active');
+
+            // Fase 1: Rajada ultra-rápida sem bloqueio de toBlob()
+            UI.triggerFlash();
+            let lastFrameTime = video.currentTime;
+            rawBurstCanvases.push(VisionEngine.grabRawFrameCanvas(video));
+
+            for (let i = 1; i < cfg.burstCount; i++) {
+              await this.waitForNextNewFrame(video, lastFrameTime, cfg.burstInterval);
+              if (!this.isMonitoring) break;
+              UI.triggerFlash();
+              lastFrameTime = video.currentTime;
+              rawBurstCanvases.push(VisionEngine.grabRawFrameCanvas(video));
+            }
+
+            // Fase 2: Inicia codificação JPEG sequencial enquanto corre o tempo de espera da mão
+            const handWaitStart = performance.now();
+            const encodedPhotos = [];
+            for (const rawCanvas of rawBurstCanvases) {
+              const encoded = await VisionEngine.encodeFrameWithThumbnail(rawCanvas, cfg.roi);
+              encodedPhotos.push({ ...encoded, isAfter: false });
+            }
+
+            let isWithdrawal = false;
+            let changePercent = 0;
+
+            if (cfg.postCheck && this.isMonitoring) {
+              UI.setMonitorStatus('Aguardando saída...', 'warn');
+              const remainingWait = Math.max(0, cfg.handWait - (performance.now() - handWaitStart));
+              if (remainingWait > 0) {
+                await new Promise((r) => setTimeout(r, remainingWait));
+              }
+
+              // Aguarda estabilidade da cena caso a mão ainda esteja sobre a prateleira
+              let settleAttempts = 0;
+              while (settleAttempts < 6 && this.isMonitoring) {
+                const stillMoving = await VisionEngine.detectMotion(video, cfg.roi, cfg.sensitivity);
+                if (!stillMoving.detected) break;
+                await new Promise((r) => setTimeout(r, 250));
+                settleAttempts++;
+              }
+
+              if (this.isMonitoring) {
+                const evalRes = await VisionEngine.evaluateWithdrawal(video, cfg.roi, cfg.diffThreshold);
+                isWithdrawal = evalRes.isWithdrawal;
+                changePercent = evalRes.changePercent;
+
+                if (isWithdrawal) {
+                  UI.triggerFlash();
+                  const afterRaw = VisionEngine.grabRawFrameCanvas(video);
+                  const afterEncoded = await VisionEngine.encodeFrameWithThumbnail(afterRaw, cfg.roi, {
+                    box: evalRes.box,
+                    changePercent
+                  });
+                  encodedPhotos.push({ ...afterEncoded, isAfter: true });
+                }
+              }
+            }
+
+            // Persistência no IndexedDB conforme modo
+            const shouldSave = cfg.mode === 'all' || (cfg.mode === 'strict' && isWithdrawal);
+            if (shouldSave && encodedPhotos.length > 0) {
+              await DBStore.addEvent({
+                timestamp: Date.now(),
+                isWithdrawal,
+                changePercent,
+                photos: encodedPhotos
+              });
+              await GalleryUI.refreshCount();
+            }
+          } catch (err) {
+            UI.showAlert(err.message || 'Falha na captura ou armazenamento do evento.', 4500);
+          } finally {
+            if (CameraManager.stream && video.readyState >= 2) {
+              await VisionEngine.syncPrevFrame(video, cfg.roi);
+            }
+            this.cooldownUntil = performance.now() + cfg.cooldown;
+            this.isProcessingEvent = false;
+            if (this.isMonitoring) {
+              UI.setMonitorStatus('Monitorando', 'active');
+            }
+          }
+        },
+
+        bindMainButtons() {
+          document.getElementById('btnCamera').addEventListener('click', async () => {
+            const wasMonitoring = this.isMonitoring;
+            if (wasMonitoring) await this.stopMonitoring();
+            await this.initCamera();
+          });
+
+          document.getElementById('btnBase').addEventListener('click', () => {
+            this.captureBaseImage();
+          });
+
+          document.getElementById('btnToggleMonitor').addEventListener('click', () => {
+            if (this.isMonitoring) {
+              this.stopMonitoring();
+            } else {
+              this.startMonitoring();
+            }
+          });
+
+          document.getElementById('btnSettings').addEventListener('click', () => {
+            SettingsUI.open();
+          });
+
+          document.getElementById('btnGallery').addEventListener('click', () => {
+            GalleryUI.open();
+          });
+
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && this.isMonitoring) {
+              CameraManager.requestWakeLock();
+            }
+          });
+        }
+      };
+
+      window.addEventListener('DOMContentLoaded', () => AppController.init());
+    })();
+  </script>
 </body>
 </html>
